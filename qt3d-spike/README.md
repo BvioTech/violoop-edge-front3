@@ -3,9 +3,10 @@
 最小化验证：Qt Quick 3D（Wayland/EGLFS QPA + `RuntimeLoader` 运行时 glTF 导入）
 能不能在 rk3576/Mali-G52 这台设备上跑 3D 动画。背景和设备已知坑见
 `../../edge-front2/docs/display-stack-overview.md`（这台设备现有 Flutter
-显示栈的事实汇总）。**真机已测完一轮**，结论见 `docs/findings.md`：非蒙皮的
+显示栈的事实汇总）。**真机已测完两轮**，结论见 `docs/findings.md`：非蒙皮的
 3D 动画可行（硬件加速、kiosk-shell 兼容、帧率、短时内存都通过），glTF
-骨骼动画目前跑不通（Qt 6.4.2 的 GLES 版本协商限制）。
+骨骼动画目前跑不通（GLES 版本协商限制——Qt 6.4.2 和从源码编译的 6.8.5
+都复现同一个问题，**排除了"换新版本就能解决"这个假设**）。
 
 ## 结构
 
@@ -63,9 +64,11 @@ QT_QPA_PLATFORM=offscreen timeout 5 ./build/qt3d_spike assets/CesiumMan.glb
 中期观察，不能排除小时级的更慢泄漏。
 
 **但 glTF 骨骼动画（蒙皮）渲染不通过**——Quick3D 给蒙皮网格生成的默认
-材质 shader 用到 `textureSize()`，需要 GLSL ES 3.00+，而 Qt 6.4.2 这两个
-QPA 后端协商出的 context 在 Quick3D 看来一直是版本 2.0（即使硬件/驱动
-实测是 ES3.2）。非蒙皮的 3D 动画（旋转、变换、程序化）不受影响。
+材质 shader 用到 `textureSize()`，需要 GLSL ES 3.00+，而 Qt 这两个 QPA
+后端协商出的 context 在 Quick3D 看来一直是版本 2.0（即使硬件/驱动实测是
+ES3.2）。**这不是 Qt 6.4.2 的版本 bug**：从源码编译的 Qt 6.8.5 在同一台
+设备上原样复现同一个失败。非蒙皮的 3D 动画（旋转、变换、程序化）不受
+影响。
 
 ## 已知限制
 
@@ -76,5 +79,6 @@ QPA 后端协商出的 context 在 Quick3D 看来一直是版本 2.0（即使硬
   结论。
 - 触摸坐标对齐完全没测（这轮场景没有任何交互元素，只验证了画面旋转本身
   是对的）。
-- glTF 骨骼动画这条限制还没找到绕过办法（候选方向见 `docs/findings.md`
-  "未覆盖"一节：换更新的 Qt 版本、少骨骼数、自定义材质手写 shader）。
+- glTF 骨骼动画这条限制还没找到绕过办法（已排除"换更新 Qt 版本"这个
+  方向——6.8.5 复现同一个问题，见 `docs/findings.md`"2026-11-02（第二轮）"；
+  剩下候选方向：少骨骼数、自定义材质手写 ES3 shader、直接改 Qt 源码）。

@@ -28,16 +28,19 @@
 | 非蒙皮的 Quick3D 3D 动画（旋转 Cube）帧率/内存 | ✅ 稳定 59–60fps，20s 内几乎不涨；追加测了约 5 分钟，净变化为 0 |
 | glTF 蒙皮动画（Khronos CesiumMan，骨骼数 38）渲染 | ❌ 两条 QPA 路径都失败：默认材质的蒙皮 shader 编译失败 |
 | 旋转、触摸坐标 | 未测（这轮只有固定视角场景，见"未覆盖"） |
+| 换 Qt 6.8.5（源码自己编译）是否修了 ESSL100 协商问题 | ❌ 没修，EGLFS 下复现一模一样的 `textureSize is not supported in ESSL 100`（见下方 2026-11-02 第二轮） |
 
 **判断**：Qt Quick3D 在这台设备上跑“3D 动画”本身是可行的——硬件加速、
 weston kiosk-shell 兼容性、帧率、内存表现都通过了，且看起来明显不会复现
 Flutter/GTK embedder 那条每帧 GL 对象泄漏的问题（§5 Flutter 基线约
 20MB/min，这边 20 秒内几乎零增长，但只测了 20 秒，不是长时间验证，不能
 直接下"没有慢速泄漏"的结论）。**但“glTF + 骨骼动画”这个具体组合目前跑不通**，
-是 Qt 6.4.2 这两个 QPA 后端在协商 GLES 版本上的一个具体限制，细节见下。
-如果产品需要的 3D 动画不依赖骨骼蒙皮（例如模型旋转、变换动画、粒子、
-程序化动画），当前证据支持可行；如果必须要蒙皮角色动画，需要先解决下面
-这条限制或验证更新的 Qt 版本。
+是 Qt 这两个 QPA 后端在协商 GLES 版本上的一个具体限制，**6.4.2 和从源码
+编译的 6.8.5 都复现同样的问题，不是版本号的问题**，细节见下。如果产品需要
+的 3D 动画不依赖骨骼蒙皮（例如模型旋转、变换动画、粒子、程序化动画），
+当前证据支持可行；如果必须要蒙皮角色动画，Qt Quick3D 默认材质这条路径
+目前在这台设备上走不通，需要走"未覆盖"一节里列的绕过方向（少骨骼数/
+自定义 ES3 shader/直接改 Qt 源码），或换掉 Quick3D 这条技术路线。
 
 ## 2026-11-02
 
@@ -197,11 +200,10 @@ Flutter/GTK embedder 那种 ~20MB/min 持续单调增长**性质完全不同**�
 
 ### 未覆盖 / 后续如果要继续深挖的方向
 
-1. **换更新的 Qt 版本（6.5/6.6/6.7+）复测**同一个 `textureSize`/ESSL100
-   问题是否已经修了——这是最值得先做的下一步，因为现象看起来像是 Qt
-   这两个 QPA 后端的版本协商限制，而不是设备硬件的硬限制。Debian
-   bookworm 只有 6.4.2，要测更新版本需要从源码编译或找第三方仓库/
-   Qt 官方在线安装器的 arm64 包，工作量比这轮大。
+1. ~~换更新的 Qt 版本（6.5/6.6/6.7+）复测同一个 `textureSize`/ESSL100
+   问题是否已经修了~~——**已在 2026-11-02 第二轮测过 6.8.5（源码编译），
+   没修，结论见下方新增章节**。不用再怀疑"是不是版本号不够新"，这条
+   路径排除了。
 2. 骨骼数更少（比如 Qt 官方 Quick3D 示例常用的几个关节的简单骨架）是否能
    避开纹理查找路径、落回 uniform 数组实现从而在 ESSL100 上也能跑——没测，
    纯推测，需要用骨骼数可控的测试资源验证。
@@ -222,3 +224,62 @@ Flutter/GTK embedder 那种 ~20MB/min 持续单调增长**性质完全不同**�
    只是帧率/日志推断。
 7. 字体（CJK）、`violoop-upgrade` 集成点——edge-front2 文档 §8.5 提到的
    系统集成面，这轮完全没碰。
+
+## 2026-11-02（第二轮）：Qt 6.8.5 源码编译复测，问题没修
+
+确认产品需要蒙皮角色动画后，为了排除"是不是 Qt 6.4.2 版本太老"这个
+假设，在 dev1 上从源码编译了 Qt 6.8.5（当时的最新 LTS 补丁版本），装到
+独立 prefix `/home/admin/qt6.8`（不碰系统包），重新编译 `qt3d_spike`
+链到这个新 prefix，同样用 `CesiumMan.glb` 在真机 EGLFS 路径上测。
+
+### 编译过程
+
+- 源码：Qt 官方 `*-everywhere-src-6.8.5.tar.xz`，模块按依赖顺序编译：
+  `qtbase` → `qtshadertools` → `qtdeclarative` → `qtwayland` +
+  `qtquicktimeline` → `qtquick3d`，每个模块 `qt-configure-module` +
+  `ninja -j8` + `ninja install`，全部编译、安装成功，没有一个模块报错。
+- **下载坑**：dev1 直接下载这几个大 tarball（尤其 qtbase/qtdeclarative/
+  qtquick3d，几百 MB 到 1GB+）反复在下载到一半时被重置
+  （`curl: (18) transfer closed with N bytes remaining to read`，
+  `xz -t` 校验失败），换 `-C -` 续传也只能多下几 MB 就又断。**绕过方法**：
+  改成在有稳定出口的机器上过代理下载，`scp` 到 dev1，`xz -t` 全部校验
+  通过后再解压——和这轮之前 apt 包下载失败时用的是同一个绕过模式。
+- 编译总耗时数小时（`qtdeclarative` 单个模块 3232 个构建步骤最久），
+  全部在后台跑、轮询完成状态，没有遇到编译错误。
+
+### 真机复测结果：问题原样复现
+
+通过同样的临时 systemd override 模式（见本文件开头"环境"一节的流程，
+测完立即还原），把 `qt3d_spike`（链到 `/home/admin/qt6.8`，
+`LD_LIBRARY_PATH`/`QML2_IMPORT_PATH` 指到这个 prefix）通过 EGLFS 路径
+跑 `CesiumMan.glb`，日志：
+
+```
+qt.rhi.general: Created OpenGL context QSurfaceFormat(version 2.0, ...)
+qt.rhi.general: OpenGL VENDOR: ARM RENDERER: Mali-G52 VERSION: OpenGL ES 3.2 ...
+WARN: Model has non-integer type indices for skinning but current RHI backend doesn't support it!
+Failed to compile vertex shader: textureSize is not supported in ESSL 100.
+```
+
+和 Qt 6.4.2 那一轮**一字不差的同一个失败模式**：硬件/驱动真实报告
+ES 3.2，但 Qt 创建的 context 在 `QSurfaceFormat` 里还是 version 2.0，
+蒙皮默认材质 shader 因此在 ESSL100 下编译失败。另外还多了一条
+6.4.2 那轮日志里没特别注意到的 WARN（`non-integer type indices for
+skinning but current RHI backend doesn't support it`）——可能指向
+CesiumMan 的 joint indices 类型和这条 RHI 后端的整数索引支持不匹配，
+是同一个"RHI/GLES 版本协商"限制的另一个表现，还是一个独立的次要问题，
+没有继续深挖，不影响这轮的核心结论。
+
+**结论**：**ESSL100/textureSize 这个限制不是 Qt 6.4.2 的版本 bug，
+6.8.5（当时最新 LTS 补丁版）原样复现。** 排除了"换新版本就能解决"这个
+最低成本的假设。往下如果还要让 Quick3D 默认材质路径跑通蒙皮，只能走
+"未覆盖"一节里排第 2、3 条的方向（少骨骼数绕开纹理查找 / 自定义材质
+手写 ES3 shader），或者直接改 Qt 源码本身（已经有源码编译环境，改动
+成本可控，但需要先确认问题具体出在哪一层——QPA 插件协商、RHI 后端，
+还是 Quick3D 的 shader 生成器硬编码假设——这部分还没做）。
+
+这轮编译验证的副作用：确认了 dev1 上从源码编译 Qt（含 qtbase/
+qtdeclarative/qtwayland/qtquicktimeline/qtquick3d 全套）本身是可行的，
+除了下载环节的网络问题之外没有遇到编译障碍——如果后面决定要自己维护一个
+定制 Qt（无论是为了修这个 bug 还是其他原因），这轮摸出来的模块编译顺序和
+`qt-configure-module` 用法可以直接复用。
