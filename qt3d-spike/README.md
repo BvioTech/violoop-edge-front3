@@ -23,7 +23,10 @@ qt3d-spike/
 │   ├── launch-under-weston.sh  # 复用 edge-front2 launcher 的 seat/weston 启动方式
 │   ├── launch-eglfs.sh     # 不经 weston，Qt 直接拿 KMS（含 split-GPU 设备选择修复）
 │   └── sample_rss.sh       # 采样进程 VmRSS，排查每帧内存泄漏
-└── docs/findings.md        # 真机测试记录与结论（已有完整真机结果，不止是待办清单）
+└── docs/
+    ├── findings.md                       # 真机测试记录与结论（已有完整真机结果，不止是待办清单）
+    ├── plan-custom-material-shader.md     # 方向 A：自定义材质手写 ES3 shader，绕开默认材质
+    └── plan-patch-qt-source.md            # 方向 B：直接改 Qt 源码定位修复版本协商 bug
 ```
 
 `assets/`（`fetch-assets.sh` 的输出目录）不入库，是下载下来的 Khronos 官方

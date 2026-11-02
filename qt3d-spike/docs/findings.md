@@ -283,3 +283,10 @@ qtdeclarative/qtwayland/qtquicktimeline/qtquick3d 全套）本身是可行的，
 除了下载环节的网络问题之外没有遇到编译障碍——如果后面决定要自己维护一个
 定制 Qt（无论是为了修这个 bug 还是其他原因），这轮摸出来的模块编译顺序和
 `qt-configure-module` 用法可以直接复用。
+
+排除了"换新版本"这条最低成本方向之后，剩下两条路分头推进，各自独立成文：
+
+- `plan-custom-material-shader.md`——自定义材质手写 ES3 shader，绕开
+  Quick3D 默认材质生成路径。
+- `plan-patch-qt-source.md`——直接改 Qt 源码，定位并修复版本协商 bug
+  本身（已有 dev1 上的源码编译环境可以直接复用）。
