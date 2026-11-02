@@ -287,6 +287,14 @@ qtdeclarative/qtwayland/qtquicktimeline/qtquick3d 全套）本身是可行的，
 排除了"换新版本"这条最低成本方向之后，剩下两条路分头推进，各自独立成文：
 
 - `plan-custom-material-shader.md`——自定义材质手写 ES3 shader，绕开
-  Quick3D 默认材质生成路径。
+  Quick3D 默认材质生成路径。**后续读源码确认这条路被同一个根因堵死，
+  已经不再投入**（CustomMaterial 的 shader 最终走的是和默认材质相同的
+  `QSSGShaderCache`/`QShaderBaker` 运行时烘焙流程，同样依据那个卡在
+  2.0 的 `QSurfaceFormat` 决定只烤 ESSL100，手写 shader 绕不开）。
 - `plan-patch-qt-source.md`——直接改 Qt 源码，定位并修复版本协商 bug
-  本身（已有 dev1 上的源码编译环境可以直接复用）。
+  本身（已有 dev1 上的源码编译环境可以直接复用）。**已经定位到具体是
+  `qssgrendershadercache.cpp` 读 `h->context->format().majorVersion()`
+  这一步在转发错误值，且确认 `qtbase` 里理论上该负责回填真实版本的
+  `QEGLPlatformContext::updateFormatFromGL()` 本身解析逻辑没问题——剩下
+  唯一要查的是这个函数有没有在真机这个 context 上真正被调用**，细节见
+  该文档。

@@ -21,54 +21,83 @@ ES3.2），于是 Quick3D 的 shader 生成/选择逻辑挑了 ESSL100 变体，
 shader，绕开默认材质生成器里那条"按照（错误的）协商版本挑 shader
 变体"的逻辑。
 
-## 关键风险（第一步必须先验证，不要先投入写 shader）
+## 结论（已通过读源码确认，不是猜测）：这条方向走不通
 
-`CustomMaterial` 的 shader 最终还是要经过 Qt 的 shader 编译管线
-（`qsb`/shadertools 离线烘焙 + 运行时按 RHI backend 选变体），**不确定
-这条管线对自定义材质 shader 的"版本选择"逻辑是否和默认材质共享同一处
-协商 bug**。如果共享，那即使手写了 `#version 300 es` 的 shader，运行时
-仍然可能被塞进 ESSL100 的编译路径，一样报错——这条方向就会被堵死，要
-先转向方向 B（改 Qt 源码）。
+**这条方向被堵死了，原因和方向 B 是同一个根因。** 2026-11-02 读
+`~/qt6.8-src/`（dev1 上，Qt 6.8.5 源码）确认了完整链路：
 
-**第一步**：写一个极简的 `CustomMaterial`（不涉及蒙皮，随便一个用
-`texelFetch`/`textureSize` 的 fragment shader 即可），在 dev1 真机上跑，
-看它是否报同样的 `textureSize is not supported in ESSL 100`。
+1. `src/runtimerender/res/effectlib/skinanim.glsllib`（Quick3D 内置的
+   蒙皮库，`qt_getTexMatrix()`）**硬编码**用 `textureSize()`/
+   `texelFetch()` 查骨骼矩阵纹理，**完全没有 ESSL100 fallback
+   实现**——不管默认材质还是自定义材质，只要做蒙皮，最终都要用到同样
+   的纹理查表手法（这是业界标准做法，骨骼数一多，uniform 数组会超限，
+   没有别的通用替代方案）。
+2. 关键的那一步在 `src/runtimerender/qssgrendershadercache.cpp` 的
+   `initBakerForNonPersistentUse()`：
 
-- 如果**不报错**（绕开成功）→ 这条方向可行，继续往下做蒙皮版本。
-- 如果**同样报错** → 说明版本协商 bug 影响的是 RHI/QPA 层面，材质类型
-  （默认 vs 自定义）不影响，这条方向走不通，去同步方向 B 的人，把这个
-  结论记回这份文档，然后两边一起转向方向 B。
+   ```cpp
+   case QRhi::OpenGLES2: {
+       QSurfaceFormat format = ...;
+       format = h->context->format();   // 问题就是这一行
+       ...
+       if (format.majorVersion() >= 3)
+           outputs.append({ QShader::GlslShader, QShaderVersion(300, GlslEs) });
+       else
+           outputs.append({ QShader::GlslShader, QShaderVersion(100, GlslEs) });
+   ```
 
-## 可行路线下的实现步骤
+   这是**运行时**决定"这个 shader 要烤成哪个 GLSL 版本"的地方，而且
+   **只烤一个版本，不是多个变体里挑**。它读的 `format.majorVersion()`
+   就是 `findings.md`/`plan-patch-qt-source.md` 里记录的、卡在 `2.0`
+   的那个 `QSurfaceFormat`。因为这个值是 2，Quick3D 直接决定"只生成
+   ESSL100 版本"，把包含 `textureSize()` 的蒙皮代码烤成一份自称
+   ESSL100、但内容非法的 shader，交给驱动编译器，驱动正确拒绝——这正是
+   实测看到的报错原文。
+3. **这条判断逻辑在 `QRhi::OpenGLES2` 这个 case 分支里统一生效，不区分
+   默认材质还是自定义材质**——`CustomMaterial` 的 shader 最终也要经过
+   同一个 `QSSGShaderCache`/`QShaderBaker` 流程，读的是同一个
+   `h->context->format()`。手写 `#version 300 es` 的 `CustomMaterial`
+   一样会被这个检查拦截、按 ESSL100 烤、一样编译失败——**版本选择不是
+   按材质类型区分的，是按 RHI backend 全局决定的，Quick3D 没有给
+   CustomMaterial 留"强制指定 GLSL 版本"的旁路**。
 
-1. 跑通上面的最小验证（见"关键风险"）。
-2. 读一遍 glTF 蒙皮的标准做法，确认骨骼矩阵纹理的编码格式：每个骨骼一个
-   `mat4`（4 个 `vec4` 纹素，或者用 RGBA32F 一行存一个矩阵），纹理宽度
-   通常是 `4 * boneCount` 或类似布局——可以参考 Quick3D 源码
-   `qtquick3d-everywhere-src-6.8.5/src/runtimerender/` 下默认材质生成
-   蒙皮 shader 片段的实际写法（dev1 上 `~/qt6.8-src/
-   qtquick3d-everywhere-src-6.8.5/` 已经有源码，不用重新下载），抄它的
-   编码格式，保证和 Quick3D 其余管线（怎么把 `Model.skin`/骨骼变换数据
-   传上来）兼容。
-3. 写 `CustomMaterial`：
-   - 显式声明 `#version 300 es`（或者用 Qt 的 shader 元语法声明需要的
-     GLSL profile，具体写法以 Quick3D 文档 `CustomMaterial` 的
-     `vertexShader`/`VARYING`/`INPUT` 约定为准）。
-   - vertex shader 里手动实现：读骨骼索引/权重属性 → `texelFetch` 查骨骼
-     矩阵纹理 → 按权重混合 → 应用到顶点位置/法线。
-4. 用 `CesiumMan.glb` 测试：先确认骨骼索引/权重数据能从 `RuntimeLoader`
-   导入的 model 上拿到（如果默认材质生成器内部拿这些数据的方式不是公开
-   API，这里可能需要额外调研——不确定 `CustomMaterial` 能不能直接复用
-   `RuntimeLoader` 导入的 skin 数据，还是需要自己解析 glTF 的
-   `skins`/`joints`/`weights` 数组另起一套导入逻辑）。
-5. 真机验证：渲染是否正确（动画是否播放、骨骼变形是否正确，不止是
-   "不报错"）、帧率、短时内存（复用 `../scripts/sample_rss.sh`）。
-6. 结果写回这份文档的"结论"一节（待填），和 `findings.md` 保持同步
-   （在 `findings.md` 加一条指回这里）。
+**推论（对后续工作很重要）**：反过来说，**如果方向 B 修好了（让
+`ctx->format()` 正确报告 3.2），默认材质的蒙皮代码本身就是对的，根本
+不需要写自定义材质**——`skinanim.glsllib` 的实现没问题，纯粹是被烤成
+了错误的目标版本。所以方向 A 不是"次优方案"，而是"在方向 B 没修好之前
+不可能成功，方向 B 修好之后又不需要"——两种情况下都不需要投入实现。
 
-## 结论（待填）
+## 如果仍然要验证（可选，纯粹为了双重确认）
 
-- [ ] 最小验证：CustomMaterial 下 `textureSize`/`texelFetch` 是否可用
-- [ ] 骨骼数据接入方式确认
-- [ ] CesiumMan 蒙皮渲染是否跑通
-- [ ] 帧率/内存验证
+上面的结论是读源码得出的，有很高把握，但没有在真机上实测过
+"CustomMaterial + texelFetch" 这个具体组合。如果想要实测级别的确认
+（而不是代码分析级别），可以写一个极简的 `CustomMaterial`（不涉及蒙皮，
+随便一个用 `texelFetch`/`textureSize` 的 fragment shader 即可）在 dev1
+上跑，预期**会**报同样的 `textureSize is not supported in ESSL 100`。
+如果真机结果和代码分析不一致（不报错），说明上面的源码分析漏看了什么，
+需要重新定位——但目前没有计划投入这个验证，因为推论链路已经很直接。
+
+## 原计划的实现步骤（已作废，保留存档）
+
+下面几步是在确认"结论"一节之前写的原始计划，**不再推进**，留着是为了
+如果以后发现上面的源码分析有误、这条方向被重新打开时，不用从头想一遍。
+
+1. ~~跑通最小验证~~ → 已改为源码分析直接判定，见"结论"一节。
+2. 读 glTF 蒙皮的标准做法，确认骨骼矩阵纹理的编码格式（`skinanim.glsllib`
+   的 `qt_getTexMatrix()` 就是这套编码，4 个纹素一个 `mat4`，按
+   `index*4` 定位——如果方向 B 修好后要抄这段实现，直接看这个文件，
+   不用重新设计格式）。
+3. 写 `CustomMaterial`，显式声明 GLSL 版本，手动实现骨骼矩阵纹理查表。
+4. 用 `CesiumMan.glb` 测试，确认骨骼索引/权重数据的接入方式。
+5. 真机验证渲染正确性、帧率、内存。
+
+## 结论
+
+- [x] 是否被同一个根因堵死：**是**，见上面"结论"一节，已通过读源码
+  确认（`qssgrendershadercache.cpp` 的 `initBakerForNonPersistentUse()`
+  按 `h->context->format().majorVersion()` 决定烤哪个 GLSL 版本，不分
+  材质类型）。
+- [ ] 如果以后想要实测双重确认，见"如果仍然要验证"一节，目前未执行。
+- 这条方向目前**不再投入**，精力转向 `plan-patch-qt-source.md`——修好
+  那边的版本协商问题后，默认材质的蒙皮会直接工作，不需要这份文档里
+  计划的任何实现。

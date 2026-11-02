@@ -36,53 +36,97 @@ ESSL300+ 才有，所以编译失败。已经验证过换 Qt 6.4.2 → 6.8.5（�
 
 ## 定位思路：先搞清楚"卡在 2.0"这件事发生在哪一层
 
-这是最关键的未知数——目前只确认了"结果是错的"，没确认"错在哪一行"。
-按从底层到高层排查：
+2026-11-02 读 dev1 上 `~/qt6.8-src/` 的源码，已经把排查范围从"三层都要查"
+收窄到"只剩第 2 层"，而且找到了第 3 层的确切代码位置（不用再猜）。
 
-1. **EGL context 创建层**（`qtbase/src/plugins/platforms/eglfs/` 和
-   `qtbase/src/platformsupport/eglconvenience/`，尤其
-   `qeglconvenience.cpp` / `qeglplatformcontext.cpp` 里构造
-   `EGL_CONTEXT_MAJOR_VERSION`/`EGL_CONTEXT_MINOR_VERSION`（或老式的
-   `EGL_CONTEXT_CLIENT_VERSION`）attribute 列表的代码）。
-   - 排查问题：Qt 请求 context 时，有没有把应用层 `QSurfaceFormat`
-     要求的 `(3,2)` 真正转成 EGL attribute 传给 `eglCreateContext`？
-     还是请求阶段本身就固定传了个低版本（比如只用老式
-     `EGL_CONTEXT_CLIENT_VERSION=2`，没走 `EGL_KHR_create_context`
-     扩展协商高版本)？
-   - 验证方法：在这几个创建 context 的函数里加 `qDebug()`/`fprintf`
-     打印实际传给 `eglCreateContext` 的 attrib 数组，重新编译 `qtbase`
-     （只需要重编 `qtbase`，这是这条链路最底层），真机跑一次看打印。
+### 第 3 层（RHI/Quick3D 怎么用这个 version）——已定位，不是根因，不用再查
 
-2. **Context 创建后的版本回填层**（`qtbase/src/gui/kernel/
-   qopenglcontext.cpp`，找类似 `QOpenGLContext::create()` /
-   处理 `format()` 更新的代码；也可能在 QPA 插件自己的
-   `QPlatformOpenGLContext` 子类里）。
-   - 排查问题：context 创建成功后，Qt 有没有反过来**查询**这个 context
-     实际支持到什么版本（例如 `glGetIntegerv(GL_MAJOR_VERSION,
-     ...)`/`GL_MINOR_VERSION`，或解析 `glGetString(GL_VERSION)`
-     字符串），再用查到的真实版本去更新 `format()`？还是直接把"请求时
-     的 format"原样当成"最终 format"用了，从头到尾没有拿真实值校正过？
-   - 这是**最可能的根因位置**：如果 EGL 层其实已经拿到了 ES3.2
-     context（驱动给的能力更高是正常行为，EGL/GLES driver 经常"你要 2
-     我给你一个兼容 2 但其实是 3.x 能力"的 context），但 Qt
-     从来没有在创建后反查一次真实版本，那 `format().version()`
-     自然会一直停在"请求时"的旧值。
+`qtquick3d/src/runtimerender/qssgrendershadercache.cpp` 的
+`initBakerForNonPersistentUse()`：
 
-3. **RHI 层用这个 version 做什么决策**（`qtbase/src/gui/rhi/
-   qrhigles2.cpp` 或 `qtbase/src/gui/rhi/qrhigles2_p.h`，搜
-   `isES`、GLSL 版本选择、`QRhiGles2InitParams` 相关逻辑；以及
-   `qtshadertools`/`qtquick3d` 里实际按 RHI backend 报告的能力选
-   shader 变体的代码，搜 `textureSize`、`ESSL`、`shaderVersion` 之类
-   关键词缩小范围）。
-   - 排查问题：即使第 2 层修好了，拿到了正确的 `3.2`，RHI/Quick3D
-     这一层是否真的会用它来挑 ESSL300 变体？还是这里也有一处独立的
-     "固定假设 ES2 profile"的硬编码？
+```cpp
+case QRhi::OpenGLES2: {
+    QSurfaceFormat format = ...;
+    format = h->context->format();   // 读的就是下面第 2 层产出的那个值
+    ...
+    if (format.majorVersion() >= 3)
+        outputs.append({ QShader::GlslShader, QShaderVersion(300, GlslEs) });
+    else
+        outputs.append({ QShader::GlslShader, QShaderVersion(100, GlslEs) });
+```
 
-**建议第一个动作**：在 (2) 这一层加日志，因为最可能是"请求值 ==
-最终记账值，中间从没查询过真实值"这种模式。如果 (2) 改完发现
-`format().version()` 变成了 `3.2` 但 shader 挑选还是不对，再往 (3)
-查。如果 (2) 改完发现 EGL attrib 本身请求就没对（(1) 的问题），先回头
-修 (1)。
+这是**运行时**决定"这个 shader 要烤成哪个 GLSL 版本"的地方，且只烤一个
+版本（不是多变体里挑）。它完全依据 `h->context->format().majorVersion()`
+——如果这个值是对的（3），这里会正确生成 `QShaderVersion(300, GlslEs)`，
+蒙皮用的 `textureSize()`/`texelFetch()`（定义在
+`src/runtimerender/res/effectlib/skinanim.glsllib`，这段代码本身没问题，
+没有另外的 ESSL100 fallback，也不需要）就能编译。**这一层只是如实转发
+第 2 层给它的（错误的）版本号，不是独立的 bug，不用再花时间查这里**，
+修复要往第 2 层去找。
+
+### 第 2 层（Context 创建后的版本回填）——范围缩小到"为什么没触发"
+
+`qtbase/src/gui/opengl/platform/egl/qeglplatformcontext.cpp` 里确实
+**有**一个负责"创建后反查真实版本"的函数——`updateFormatFromGL()`
+（约第 270 行）：
+
+```cpp
+void QEGLPlatformContext::updateFormatFromGL()
+{
+    ...
+    if (ok) {
+        const GLubyte *s = glGetString(GL_VERSION);
+        if (s) {
+            QByteArray version = QByteArray(reinterpret_cast<const char *>(s));
+            int major, minor;
+            if (QPlatformOpenGLContext::parseOpenGLVersion(version, major, minor)) {
+                m_format.setMajorVersion(major);
+                m_format.setMinorVersion(minor);
+            }
+        }
+        ...
+    }
+}
+```
+
+手动验证过 `QPlatformOpenGLContext::parseOpenGLVersion()`（在
+`qtbase/src/gui/kernel/qplatformopenglcontext.cpp`）对我们真机的真实
+版本字符串 `"OpenGL ES 3.2 v1.g24p0-00eac0.4f825ed56fb37b32dde262046b053498"`
+**能正确解析成 major=3, minor=2**（按空格分段取第 3 段 `"3.2"`，按 `.`
+分段取整数，这段逻辑没问题）。**也就是说：如果 `updateFormatFromGL()`
+真的在这个 context 上跑过，`m_format` 应该已经是 3.2 了，不会停在
+2.0。**
+
+这就把问题精确收窄成一个问题：**`updateFormatFromGL()` 到底有没有在
+`QRhiGles2::create()` 创建的那个 context 上真正执行过，执行时
+`glGetString(GL_VERSION)` 查到的又是什么？** 候选可能性（没有继续往下
+查，需要加日志实测才能确定）：
+
+- 没有被调用——`initialize()`（调用 `updateFormatFromGL()` 的入口）可能
+  只在某些时机触发（代码注释里写"Cannot just call updateFormatFromGL()
+  since it relies on virtuals. Defer it to initialize()"），`eglfs_kms`/
+  `wayland-egl` 各自的 QPA 集成代码在创建 `QRhiGles2` 用的这个 context
+  时，调用链路上可能没有触发到这个 `initialize()`。
+- 被调用了，但 `eglMakeCurrent` 在临时 surface（pbuffer 或 surfaceless
+  扩展）上失败或拿到了一个不同于真实窗口 context 的配置，导致这次
+  `glGetString` 查到的不是真机那个 ES3.2 context 的版本（函数里本身有
+  "Failed to make temporary surface current, format not updated" 的
+  warning 分支，真机日志里没见过这条 warning，但没专门找过）。
+- 这个 `QRhiGles2::create()` 用的 `ctx`（`qrhigles2.cpp` 里
+  `new QOpenGLContext`）走的根本不是 `QEGLPlatformContext` 这条代码，
+  而是另一条 QPA 插件专属的 context 实现（`eglfs_kms`/`wayland-egl`
+  各自可能有自己的 `QPlatformOpenGLContext` 子类，只是复用了部分
+  `qeglconvenience.cpp` 的辅助函数，不是整个继承 `QEGLPlatformContext`
+  的创建+回填流程）——需要确认这两个 QPA 后端实际用的 context 类是不是
+  真的是 `QEGLPlatformContext` 本身。
+
+**下一步具体动作**：在 `updateFormatFromGL()`（约 273 行开始）里加
+`qDebug() << "updateFormatFromGL called, ok=" << ok << "glGetString(GL_VERSION)=" << (const char*)glGetString(GL_VERSION);`
+这样的打印，重新编译 `qtbase`（`cd ~/qt6.8-build/qtbase && ninja -j8 &&
+ninja install`），真机跑一次看这行到底有没有出现、出现时内容是什么。
+如果这行完全没出现过，说明是"没被调用"（上面第一种可能）——接下来要去
+确认 `eglfs_kms`/`wayland-egl` 各自的 context 类是不是真的继承/调用了
+这个基类函数。
 
 ## 验证流程
 
@@ -112,9 +156,19 @@ fork 一个仓库专门构建"我们自己的 Qt"。如果这条路修好了：
   `edge-front3` 里——`edge-front3` 该放的是产品代码，不是 Qt 构建基础
   设施。这部分等这条方向真的跑通了再具体规划，不要提前投入。
 
-## 结论（待填）
+## 结论（进行中）
 
-- [ ] 定位到问题具体在哪一层（EGL 创建 / 版本回填 / RHI 决策）
+- [x] RHI/Quick3D 决策层（第 3 层）：**已定位，确认不是独立 bug**，只是
+  如实转发第 2 层的值，见上面 `qssgrendershadercache.cpp` 一节。
+- [x] 顺带确认了`skinanim.glsllib` 的蒙皮代码本身没问题，不需要改——只要
+  第 2 层修好，蒙皮会直接可以用（也因此否定了 `plan-
+  custom-material-shader.md` 那条方向，不需要手写 shader）。
+- [ ] 第 2 层（`updateFormatFromGL()`）实际有没有被调用、调用时查到
+  什么——**这是现在唯一剩下的未知数**，见上面"下一步具体动作"，需要加
+  日志实测，还没做。
+- [ ] 第 1 层（EGL attrs 请求）：如果第 2 层确认"被调用但查到的就是错的
+  2.0"，才需要往这层查；如果第 2 层确认"根本没被调用"，这层不是重点，
+  重点是搞清楚 `eglfs_kms`/`wayland-egl` 的 context 创建路径。
 - [ ] patch 后 `QSurfaceFormat` 是否正确报告 3.2
 - [ ] patch 后蒙皮 shader 是否编译通过、渲染正确
 - [ ] 帧率/内存验证
