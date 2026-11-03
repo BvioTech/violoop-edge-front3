@@ -57,4 +57,24 @@ Window {
               "  sync(ms): " + view3d.renderStats.syncTime.toFixed(2) +
               "  render(ms): " + view3d.renderStats.renderTime.toFixed(2)
     }
+
+    // Periodic performance sample: fps/sync/render come from Quick3D here;
+    // CPU/memory/GPU/temperature are sampled in C++ (perfMonitor, see
+    // perf_monitor.cpp) since QML has no access to procfs/sysfs. Logged to
+    // CSV ($QT3D_SPIKE_PERF_LOG, default $TMPDIR/qt3d_spike_perf.csv) and
+    // to stdout - see docs/findings.md for how to read the results.
+    Timer {
+        interval: 1000
+        running: true
+        repeat: true
+        onTriggered: {
+            // perfMonitor is only registered by qt3d_spike's main.cpp, not
+            // by qml_runner.cpp - guard so this file still loads under both.
+            if (typeof perfMonitor !== "undefined")
+                perfMonitor.logSample(
+                    view3d.renderStats.fps,
+                    view3d.renderStats.syncTime,
+                    view3d.renderStats.renderTime)
+        }
+    }
 }

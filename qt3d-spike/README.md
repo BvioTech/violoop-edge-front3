@@ -17,6 +17,7 @@ kiosk-shell 兼容、帧率、短时内存都通过）；骨骼动画最早两�
 qt3d-spike/
 ├── CMakeLists.txt          # Qt6 + Quick3D 可执行文件
 ├── main.cpp                # 最小 QGuiApplication + QQmlApplicationEngine
+├── perf_monitor.h/.cpp     # 性能采样：fps/cpu/内存/gpu占用/温度，每秒写 CSV（见下方"性能记录"）
 ├── runtime_loader.qml      # View3D + RuntimeLoader 加载 glTF，显示 fps/渲染耗时
 ├── qml_runner.cpp          # 不用 CMake/资源打包，直接跑任意 .qml 文件（见文件头注释的 g++ 命令）
 ├── primitive_test.qml      # 非蒙皮的旋转 Cube 基线场景，配 qml_runner 用
@@ -80,6 +81,24 @@ desktop=ON`），而不是 GLES，导致版本查询链接到了错误的 GL 分
 `qtquicktimeline` 里一个独立的关键帧 off-by-one bug；最后真机接显示器
 肉眼确认骨骼动画渲染正确、动画在动。完整过程见 `docs/findings.md`
 "2026-11-03（第三轮）"和 `docs/plan-patch-qt-source.md`。
+
+## 性能记录
+
+`qt3d_spike` 运行时每秒采样一次性能数据，写入 CSV（默认
+`$TMPDIR/qt3d_spike_perf.csv`，可用 `QT3D_SPIKE_PERF_LOG` 环境变量改
+路径）并同时打印到 stdout（`perf: ...` 前缀，会进已有的日志捕获流程）。
+列：`timestamp,elapsed_s,fps,sync_ms,render_ms,cpu_pct,rss_kb,gpu_pct,
+soc_temp_c,gpu_temp_c`。
+
+- fps/sync/render：来自 Quick3D 的 `view3d.renderStats`（QML 侧读取）。
+- cpu_pct：进程 CPU 占用，算法和 `top`/`ps` 一致（单核 100% 为满，
+  多线程可能超过 100%），从 `/proc/self/stat` 的 utime+stime 算增量。
+- rss_kb：`/proc/self/status` 的 `VmRSS`。
+- gpu_pct/soc_temp_c/gpu_temp_c：读 dev1（rk3576/Mali-G52）专用
+  的 sysfs 节点（`/sys/devices/platform/27800000.gpu/utilisation`、
+  `/sys/class/thermal/thermal_zone{0,5}/temp`），换别的设备需要用
+  `QT3D_SPIKE_GPU_UTIL_PATH`/`QT3D_SPIKE_GPU_TEMP_PATH`/
+  `QT3D_SPIKE_SOC_TEMP_PATH` 环境变量覆盖，读不到就记 `-1`，不会崩。
 
 ## 已知限制
 

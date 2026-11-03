@@ -3,6 +3,8 @@
 #include <QQmlContext>
 #include <QSurfaceFormat>
 
+#include "perf_monitor.h"
+
 int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
@@ -22,6 +24,7 @@ int main(int argc, char *argv[])
     QSurfaceFormat::setDefaultFormat(fmt);
 
     QQmlApplicationEngine engine;
+    engine.rootContext()->setContextProperty("perfMonitor", new PerfMonitor(&engine));
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed,
         &app, []() { QCoreApplication::exit(-1); },
