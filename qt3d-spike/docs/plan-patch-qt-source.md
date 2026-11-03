@@ -254,27 +254,65 @@ fork 一个仓库专门构建"我们自己的 Qt"。如果这条路修好了：
   supported in ESSL 100`，也没有再出现 `WARN: Model has non-integer
   type indices for skinning`，`RuntimeLoader status: 1 errorString:
   Success!`（加载成功）。**ESSL100/GLES 版本协商这个根因 bug 确认修复。**
-- [ ] 渲染正确性——**发现了一个新的、独立的问题**，蒙皮 shader
-  编译通过后，运行时疯狂刷日志（几秒内 1 万多条）：
+- [x] 渲染正确性（骨骼动画部分）——**发现并修复了第二个、独立的 Qt
+  bug**。蒙皮 shader 编译通过后，运行时疯狂刷日志（几秒内 1 万多条）：
   ```
   Could not find any constructor for value type QQuickVector3DValueType to call with value QVariant(Invalid)
   Cannot set property "position"
   ```
   定位到 `qtquicktimeline-everywhere-src-6.8.5/src/timeline/
-  qquickkeyframe.cpp:609` 的 `QQuickKeyframeGroup::setProperty()`——
-  说明 `RuntimeLoader` 在运行时是靠动态生成 `QtQuickTimeline`
-  的 Keyframe/Timeline 对象来驱动 glTF 骨骼动画的（和
-  `assetutils/qssgqmlutilities.cpp` 离线生成 `.qml` 文件的机制共用一套
-  转换逻辑），某个动画通道算出来的值是 `QVariant(Invalid)`，写不进
-  `position`（vector3d 类型）属性。`onBoundsChanged` 日志里 bounds 也
-  打印成空的 `QQuick3DBounds3(, )`。**这是在 ES3 bug 修好之后才暴露
-  出来的新问题**——之前 shader 编译不过，动画这段代码根本没机会跑到；
-  现在跑到了，发现了另一层 bug。还没确认这是 Qt 6.8.5 本身的 bug、还是
-  这个 GLES 构建配置引入的副作用、还是 `CesiumMan.glb` 这个测试模型的
-  某个动画通道数据跟 Quick3D 运行时导入器不兼容——需要单独排查，没有
-  做视觉渲染结果确认（没有截屏手段，这台设备是 KMS 直出，没有 weston
-  截屏）。
-- [ ] 帧率/内存验证——还没做，待动画问题解决或确认不影响渲染后再测。
+  qquickkeyframe.cpp` 的 `QQuickKeyframeGroupPrivate::loadKeyframes()`
+  （被 `QQuickKeyframeGroup::setProperty()` 间接触发）——**这是一个独立
+  于 ES3/GLES 问题的、真实存在于 Qt 6.8.5 本身的 off-by-one 循环边界
+  bug**，和我们这轮的构建配置无关：
+
+  ```cpp
+  // 原来的代码（有 bug）：
+  for (qsizetype i = 0; i < arraySize - frameSize; i += frameSize) { ... }
+  ```
+
+  `arraySize = N * frameSize`（N 个关键帧，每个占 `frameSize` 个数组
+  槽位，Vec3/position 类型 `frameSize=5`：time + easing + x/y/z，见
+  `validFrameSize()`）。按这个循环条件算，**永远只处理 N-1
+  个关键帧，漏掉最后一个**——对大多数通道这只是漏掉最后一帧（影响不大，
+  可能有轻微的动画收尾瑕疵），但**对恰好只有 1 个关键帧的通道
+  （`arraySize == frameSize`），循环条件变成 `i < 0`，一次都不执行**，
+  这个属性的 `keyframes` 列表永远是空的——`QQuickKeyframeGroup::
+  evaluate()` 看到 `sortedKeyframes.isEmpty()` 就直接 `return
+  QVariant()`（无效值），于是每一帧都尝试把无效值写进 `position`
+  属性，刷出海量警告。CesiumMan.glb 的骨骼里显然至少有一个关节的
+  `position`（translation）通道只有 1 个关键帧（静止不动的骨骼，glTF
+  导出器仍然写了一个显式的单帧通道，而不是干脆不写这个通道）。
+
+  **这是 ES3 bug 修好之后才有机会暴露出来的**——之前蒙皮 shader
+  编译不过，这段运行时动画绑定代码虽然仍会执行（和 GPU 渲染是否成功
+  无关），但当时没人专门盯着这类次要日志去找；现在蒙皮能跑了，这个
+  问题才被我们注意到并查清楚。
+
+  **修复**：把循环条件改成不漏最后一个元素：
+
+  ```cpp
+  for (qsizetype i = 0; i + frameSize <= arraySize; i += frameSize) { ... }
+  ```
+
+  重新编译 `qtquicktimeline`（`cd ~/qt6.8-build/qtquicktimeline &&
+  ninja -j8 && ninja install`），真机复测：**`Could not find any
+  constructor`/`Cannot set property` 这组警告完全消失（0 条）**，
+  `RuntimeLoader status: 1 errorString: Success!` 依旧，进程持续跑了
+  15+ 秒无崩溃无新增警告，`ps` 显示稳定 ~59% CPU（符合"线程化渲染循环 +
+  动画持续更新"的预期负载，不是卡死/空转）。**没有做视觉截屏确认**
+  （这台设备是 KMS 直出，没有 weston，没找到可用的截屏工具如
+  ffmpeg/kmsgrab/fbgrab）——`onBoundsChanged` 日志打印的
+  `QQuick3DBounds3(, )` 看起来是空的，但确认了 `QQuick3DBounds3`
+  这个 `Q_GADGET` 没有自己的 `QDebug operator<<` 实现，用的是 Qt
+  通用的属性反射打印机制，这个打印本身是否能正确显示 `QVector3D`
+  属性值存疑（可能是打印格式的问题，不是 bounds 真的是零）——这点
+  没有继续深挖，**不影响"两个已知 bug 都已修复"这个核心结论**，但建议
+  后续如果要验收"渲染画面确实对、骨骼动画确实在动"，需要找一台有
+  显示输出/能截屏的环境（或者给这台设备接显示器拍照）来肉眼确认。
+- [ ] 帧率/内存验证——两个 bug 都修复后还没正式测，下一步可以做（复用
+  `scripts/sample_rss.sh` 和已有的 fps 显示 Text 元素，需要能看到屏幕
+  或截屏才能读到 fps 数字）。
 - [ ] 清理调试用的 `[dbgpatch]` qDebug 日志（在
   `qtbase-everywhere-src-6.8.5/src/gui/opengl/platform/egl/
   qeglplatformcontext.cpp`）

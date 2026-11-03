@@ -29,7 +29,8 @@
 | glTF 蒙皮动画（Khronos CesiumMan，骨骼数 38）渲染 | ❌ 两条 QPA 路径都失败：默认材质的蒙皮 shader 编译失败 |
 | 旋转、触摸坐标 | 未测（这轮只有固定视角场景，见"未覆盖"） |
 | 换 Qt 6.8.5（源码自己编译）是否修了 ESSL100 协商问题 | ❌ 没修，EGLFS 下复现一模一样的 `textureSize is not supported in ESSL 100`（见下方 2026-11-02 第二轮） |
-| 用 `-opengl es2` 重新编译 qtbase 是否修复 ESSL100/版本协商根因 | ✅ 修复，蒙皮 shader 编译通过，`QSurfaceFormat` 正确报告 3.2（见下方 2026-11-03 第三轮）；但暴露出一个新的、独立的骨骼动画属性绑定问题，还没解决 |
+| 用 `-opengl es2` 重新编译 qtbase 是否修复 ESSL100/版本协商根因 | ✅ 修复，蒙皮 shader 编译通过，`QSurfaceFormat` 正确报告 3.2（见下方 2026-11-03 第三轮） |
+| 骨骼动画属性绑定报错（`Cannot set property "position"` 刷屏） | ✅ 也修复了，是 `qtquicktimeline` 里一个独立的 off-by-one bug，和 GLES 配置无关（见下方 2026-11-03 第三轮） |
 
 **判断**：Qt Quick3D 在这台设备上跑“3D 动画”本身是可行的——硬件加速、
 weston kiosk-shell 兼容性、帧率、内存表现都通过了，且看起来明显不会复现
@@ -340,7 +341,18 @@ Cannot set property "position"
 `RuntimeLoader` 运行时是靠动态生成 `QtQuickTimeline` 的 Keyframe 对象
 驱动 glTF 骨骼动画的，某个动画通道算出来的值是无效的，写不进
 `position` 属性。这是 ES3 bug 修好之后才有机会暴露出来的（之前 shader
-编译不过，这段动画代码根本跑不到）。还没做视觉渲染结果确认（这台设备
-是 KMS 直出，没有截屏手段），也还没定论这是 Qt 6.8.5 本身的 bug、还是
-`CesiumMan.glb` 这个测试模型的某个通道数据不兼容——留给下一步排查，
-见 `plan-patch-qt-source.md`"结论"一节。
+编译不过，这段动画代码根本跑不到）。
+
+**这个也查清楚并修复了**：根因是 `qtquicktimeline` 的
+`QQuickKeyframeGroupPrivate::loadKeyframes()` 里一个 off-by-one 的
+循环边界——`for (i = 0; i < arraySize - frameSize; i += frameSize)`
+永远漏掉每个通道的最后一个关键帧，对只有 1 个关键帧的通道
+（`arraySize == frameSize`）直接变成一次都不执行，导致这个属性的
+关键帧列表完全是空的，每帧都尝试写一个无效值。这是**真实存在于 Qt
+6.8.5 本身的独立 bug**，和这轮的 GLES 构建配置无关，只是之前蒙皮
+shader 编译不过，这段代码没机会被注意到。改成
+`for (i = 0; i + frameSize <= arraySize; i += frameSize)` 后重新
+编译 `qtquicktimeline`，真机复测：这组警告完全消失（0 条），进程
+稳定跑了 15+ 秒、CPU 占用 ~59%（符合持续渲染+动画更新的预期负载）。
+**没有做视觉截屏确认**（设备没有现成的截屏手段），细节、代码位置和
+验证过程见 `plan-patch-qt-source.md`。
