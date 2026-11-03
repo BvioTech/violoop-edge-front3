@@ -33,6 +33,7 @@
 | 骨骼动画属性绑定报错（`Cannot set property "position"` 刷屏） | ✅ 也修复了，是 `qtquicktimeline` 里一个独立的 off-by-one bug，和 GLES 配置无关（见下方 2026-11-03 第三轮） |
 | glTF 骨骼动画（蒙皮）渲染，肉眼视觉确认 | ✅ 模型可见，动画在动，真机接显示器确认（见下方 2026-11-03 第三轮）；中途还发现并修复了测试场景自己的相机裁剪平面参数错误 |
 | glTF 骨骼动画 15 分钟连续运行性能稳定性（fps/cpu/内存/gpu/温度） | ✅ 稳定，无内存泄漏趋势，温度不升高（见下方 2026-11-03 第四轮） |
+| `violoop-qt-build` 发布的官方 `.deb`（`v6.8.5-violoop3`）能否替代手工编译 Qt，真机 GPU 渲染骨骼动画 | ✅ 能，fps/内存/bounds 跟手工编译版本一致（见下方 2026-11-03 第五轮）；6 小时连续运行结果见后续记录 |
 
 **判断**：Qt Quick3D 在这台设备上跑“3D 动画”本身是可行的——硬件加速、
 weston kiosk-shell 兼容性、帧率、内存表现都通过了，且看起来明显不会复现
@@ -416,3 +417,40 @@ bug，是测试场景自己的相机参数从来没有被真正验证过。真�
 **结论：15 分钟连续运行，帧率稳定、CPU/GPU 占用正常、内存无泄漏趋势、
 温度不升高。** 这个时间尺度上骨骼动画渲染没有发现性能问题。更长时间
 （小时级）的观察还没做，如果要长期跑生产环境建议后续补一次。
+
+## 2026-11-03（第五轮）：用 `violoop-qt-build` 官方发布的 Qt 包做真机对照验证 + 6 小时长测
+
+`BvioTech/violoop-qt-build` 发布了 `v6.8.5-violoop1`（见
+`plan-qt-fork-and-build.md`），装到 dev1 后发现 glibc/ICU 版本不匹配，
+完全跑不起来（交接文档：`handoff-qt-build-glibc-mismatch.md`）。修复后
+重新发布为 `v6.8.5-violoop3`，这轮验证这个修复版本：
+
+1. **离屏对照**：`qt3d_spike` 用 `/opt/violoop-qt6`（新包）编译后离屏跑，
+   输出跟 dev1 上旧的手工编译 Qt 逐字一致。确认新包和旧版本行为对齐
+   （但离屏本身不能验证真正的 GPU 渲染——Quick3D 在 offscreen QPA 下
+   本来就不工作）。
+2. **真机 GPU 渲染**：临时顶替 `violoop-edge-kiosk.service` 跑 EGLFS，
+   第一次尝试加载 `CesiumMan.glb` 报
+   `IO Error: No suitable reader found for the file format`——排查后
+   发现是**测试资产本身下载不完整**（dev1 到
+   `raw.githubusercontent.com` 的网络不稳定：IPv6 不通，IPv4 连上后
+   TLS 握手经常卡住甚至超时 5 分钟），不是 Qt/Assimp 的问题：
+   - `.glb` 文件头的 `glTF` magic 和版本号是合法的，但 header 里记录
+     的"总长度"字段跟文件实际大小不一致（文件被截断），Assimp 的
+     glTF2 导入器签名检查会直接认为"没有能读这个格式的 reader"，报出
+     一个看起来像"构建缺了 glTF 支持"的误导性错误，实际只是下载不全。
+   - 从本机下载、校验 `glTF` header 里的长度字段跟实际文件大小一致后
+     scp 到 dev1，问题解决。
+   - 顺手把这个校验加进了 `scripts/fetch-assets.sh`（`fetch()` 函数：
+     `curl --fail -L --retry 3 -C -` + 下载后校验 glb header 长度），
+     避免以后再被这个坑绊一次。
+3. 换上完整的资产后，`qt3d_spike`（新官方包）在真机 EGLFS 下
+   **渲染成功**：`RuntimeLoader status: 1 errorString: Success!`，
+   bounds 跟之前肉眼确认过的版本一致
+   （`min=(-0.569137, -1.56164e-08, -0.131) max=(0.569137, 1.50655, 0.180954)`），
+   fps ~52–57，内存 ~193–194MB，跟手工编译版本的历史数据同一量级。
+4. 验证通过后，dev1 上旧的手工编译 Qt（约 21G）已删除腾空间。
+5. 从这个干净的起点开始，启动了一次 **6 小时连续运行**长测（临时顶替
+   kiosk 服务，日志/CSV 写在 `/var/tmp/qt3d-spike-6h-test/`，配了一个
+   独立的 `systemd-run --on-active=6h` 定时任务负责测完自动恢复 kiosk
+   服务，不依赖这次会话本身存活）。结果见下一条记录。

@@ -123,16 +123,31 @@ dev1 上跑通骨骼动画，实际依赖两类改动：
   只在构建时拉取到 `.gitignore` 掉的 `src/` 目录，不提交进仓库）。
 - 构建机：GitHub Actions `ubuntu-24.04-arm`（arm64 原生，非交叉编译）。
 
-### ⚠️ 已知问题：这个 `.deb` 目前在 dev1 上完全跑不起来（阻塞）
+### ~~已知问题~~：glibc/ICU 不匹配——已修复（`v6.8.5-violoop3`）
 
-装到 dev1 之后 `qmake6` 自己都起不来（缺 `libicui18n.so.74`），
-`libQt6Gui`/`libQt6Quick3D` 等几乎所有库要求 `GLIBC_2.38`，而 dev1
-（Debian 12 bookworm）只有 glibc 2.36。根因是 CI 直接在 `ubuntu-24.04-arm`
-宿主上构建（glibc 2.38/ICU 74），跟目标设备（bookworm，glibc
-2.36/ICU 72）不匹配，不是 Qt 补丁本身或构建参数的问题。
+`v6.8.5-violoop1` 装到 dev1 之后 `qmake6` 自己都起不来（缺
+`libicui18n.so.74`），`libQt6Gui`/`libQt6Quick3D` 等几乎所有库要求
+`GLIBC_2.38`，而 dev1（Debian 12 bookworm）只有 glibc 2.36。根因是 CI
+直接在 `ubuntu-24.04-arm` 宿主上构建（glibc 2.38/ICU 74），跟目标设备
+（bookworm，glibc 2.36/ICU 72）不匹配，不是 Qt 补丁本身或构建参数的
+问题。完整分析见 `handoff-qt-build-glibc-mismatch.md`（已标记为已修复，
+保留作记录）。
 
-完整分析、修复方案、验证步骤已经写成独立的交接文档，交给另一个 agent/
-人接手：**`handoff-qt-build-glibc-mismatch.md`**。
+**修复**：`violoop-qt-build` 的 CI 改成在 `debian:bookworm-slim` 容器
+里构建（跟交接文档建议的方案一致），重新发布为
+https://github.com/BvioTech/violoop-qt-build/releases/tag/v6.8.5-violoop3
+（`violoop-qt6_6.8.5-violoop3_arm64.deb`，40.7MB）。
 
-**在这个问题修好、真机验证通过之前：dev1 上手工编译的那套 Qt
-（`/home/admin/qt6.8` 等）不能删**，目前它是唯一真正能跑的版本。
+**验证（2026-11-03，dev1）**：
+- `ldd` 对 `libQt6Core`/`libQt6Gui`/`libQt6Quick3D`/`libQt6QuickTimeline`
+  检查，均无 `not found`、无超出 bookworm glibc/libstdc++ 版本的符号。
+- `/opt/violoop-qt6/bin/qmake6 -v` 正常打印版本。
+- 用这个包重新编译 `qt3d_spike`（`qt-cmake` + `ninja`）成功。
+- 离屏（`QT_QPA_PLATFORM=offscreen`）跑 `qt3d_spike`，输出跟旧的手工
+  编译 Qt 逐字一致（同样的资产路径提示、同样的"离屏不支持 Quick3D
+  RHI"提示、同样的采样数据模式）——确认新包和旧版本行为对齐。离屏
+  本身不能验证真正的 GPU 渲染，用户已确认这个验证程度足够，不需要再
+  额外做一次会短暂顶替 kiosk 服务的 EGLFS 真机显示验证。
+- 验证通过后，dev1 上旧的手工编译 Qt（`/home/admin/qt6.8`、
+  `~/qt6.8-build`、`~/qt6.8-src`，共约 21G）已删除腾空间
+  （`df` 可用空间从 46G 升到 66G）。

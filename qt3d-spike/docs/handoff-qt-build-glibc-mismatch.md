@@ -1,5 +1,12 @@
 # 交接：`violoop-qt-build` 发布的 .deb 在目标设备上完全起不来（glibc/ICU 不匹配）
 
+> **已修复并验证（2026-11-03）。** `v6.8.5-violoop3` 改成在
+> `debian:bookworm-slim` 容器里构建（CI diff 见下方"建议修法"一节，
+> 实际采用的方案跟建议完全一致），dev1 上验证 `ldd` 干净、`qmake6`
+> 正常、`qt3d_spike` 用这个包重新编译后离屏行为跟旧的手工编译 Qt
+> 完全一致。dev1 上旧的手工编译 Qt（`/home/admin/qt6.8*`，约 21G）已经
+> 删除腾空间。这份文档保留作为问题记录，不用再处理。
+
 > 面向接手这个具体问题的人/agent。背景文档（两个真实 Qt bug 的调查过程、
 > fork+构建的整体规划）在 `findings.md`、`plan-patch-qt-source.md`、
 > `plan-qt-fork-and-build.md`，这里只讲这一个阻塞性问题，不用重新读完
