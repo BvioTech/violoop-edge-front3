@@ -306,13 +306,38 @@ fork 一个仓库专门构建"我们自己的 Qt"。如果这条路修好了：
   `QQuick3DBounds3(, )` 看起来是空的，但确认了 `QQuick3DBounds3`
   这个 `Q_GADGET` 没有自己的 `QDebug operator<<` 实现，用的是 Qt
   通用的属性反射打印机制，这个打印本身是否能正确显示 `QVector3D`
-  属性值存疑（可能是打印格式的问题，不是 bounds 真的是零）——这点
-  没有继续深挖，**不影响"两个已知 bug 都已修复"这个核心结论**，但建议
-  后续如果要验收"渲染画面确实对、骨骼动画确实在动"，需要找一台有
-  显示输出/能截屏的环境（或者给这台设备接显示器拍照）来肉眼确认。
-- [ ] 帧率/内存验证——两个 bug 都修复后还没正式测，下一步可以做（复用
-  `scripts/sample_rss.sh` 和已有的 fps 显示 Text 元素，需要能看到屏幕
-  或截屏才能读到 fps 数字）。
+  属性值存疑（可能是打印格式的问题，不是 bounds 真的是零）。
+
+  **2026-11-03 后续排查确认：确实是打印格式问题，不是真的零。** 把
+  `runtime_loader.qml` 里的 `console.log("...", bounds)` 改成分别打印
+  `bounds.minimum`/`bounds.maximum`（这两个是 `QVector3D`，有正常的
+  调试打印实现）后，真机复测拿到了合理的数值：
+  ```
+  min= QVector3D(-0.569137, -1.56164e-08, -0.131) max= QVector3D(0.569137, 1.50655, 0.180954)
+  ```
+  这是一个站立在原点附近、身高约 1.5 米的人形模型——**几何体是对的，
+  导入是对的**。`QQuick3DBounds3` 这个 `Q_GADGET` 没有自己的
+  `QDebug`/`console.log` 友好的字符串转换，直接 `console.log(bounds)`
+  在 QML 里就是打印不出内容，纯粹是打印方式的问题，和渲染正确性无关。
+
+- [x] **视觉确认：已完成，模型可见，动画在动。** 真机接显示器肉眼确认。
+  中间发现并修复了第三个问题——不是 Qt 的 bug，是这份测试用 QML
+  场景（`runtime_loader.qml`）自己的相机参数从来没被实际跑通过验证：
+  `PerspectiveCamera` 的默认 `clipNear` 是 **10**（Quick3D 的历史默认值
+  假设场景单位是"百"量级），但这个场景相机放在 `position: (0, 1.2,
+  3.5)`，离原点只有 3.5 个单位，而 CesiumMan.glb 是按**米**为单位的
+  人形模型（身高约 1.5），整个模型都比近裁剪面还近，**全部被裁掉了**——
+  肉眼看到的是纯黑背景 + fps 文字，没有任何报错，因为这不是渲染失败，
+  是"渲染了，但裁剪平面把模型整个裁没了"。这段 QML 是在整条链路都跑不
+  通的时候写的，相机参数从来没有机会被实际验证过，直到今天 ES3 bug 和
+  关键帧 bug 都修好、第一次真的渲染到了这一步才暴露出来。
+
+  修复：给 `PerspectiveCamera` 显式设置 `clipNear: 0.1` / `clipFar:
+  100`（匹配米级场景单位），重新编译、真机复测，**肉眼确认模型可见、
+  骨骼动画在正常播放**。改动见 `runtime_loader.qml`。
+
+- [ ] 帧率/内存验证——三个问题都修复后还没正式测，下一步可以做（复用
+  `scripts/sample_rss.sh` 和已有的 fps 显示 Text 元素）。
 - [ ] 清理调试用的 `[dbgpatch]` qDebug 日志（在
   `qtbase-everywhere-src-6.8.5/src/gui/opengl/platform/egl/
   qeglplatformcontext.cpp`）

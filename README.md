@@ -11,10 +11,12 @@
   （硬件、EGL/GLES-only 驱动现状、weston kiosk-shell 链路、应用侧旋转、
   已知坑清单，和给新框架的最小验证清单）。
 - 本次验证的代码、脚本和结论：`qt3d-spike/`（见其 `README.md` 和
-  `docs/findings.md`）。真机已测完两轮：非蒙皮 3D 动画可行（硬件加速、
-  旋转、帧率、约 5 分钟内存观察都通过），glTF 骨骼动画（蒙皮）目前跑不通
-  （GLES 版本协商限制，Qt 6.4.2 和从源码编译的 6.8.5 都复现同一个问题，
-  **不是版本号的问题**，细节见 `docs/findings.md`）。
+  `docs/findings.md`）。真机已测完三轮：非蒙皮 3D 动画可行（硬件加速、
+  旋转、帧率、约 5 分钟内存观察都通过），**glTF 骨骼动画（蒙皮）最终
+  确认可行**——定位并修复了三个独立问题（从源码编译的 qtbase 被错误
+  配置成桌面 OpenGL 而不是 GLES；`qtquicktimeline` 的一个关键帧
+  off-by-one bug；测试场景自己的相机裁剪平面参数错误），真机接显示器
+  肉眼确认骨骼动画渲染正确、动画在动。细节见 `docs/findings.md`。
 
 ## Qt Quick 3D 授权路线：已决定
 

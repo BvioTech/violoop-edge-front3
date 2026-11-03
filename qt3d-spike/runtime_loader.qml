@@ -28,6 +28,11 @@ Window {
         PerspectiveCamera {
             position: Qt.vector3d(0, 1.2, 3.5)
             eulerRotation: Qt.vector3d(-10, 0, 0)
+            // Default clipNear (10) is larger than this camera's distance to
+            // the model (~3.5, meter-scale glTF asset), so the whole model
+            // was being clipped away. Use clip planes that fit meter-scale content.
+            clipNear: 0.1
+            clipFar: 100
         }
 
         DirectionalLight {
@@ -38,7 +43,7 @@ Window {
         RuntimeLoader {
             source: Qt.resolvedUrl(assetPath)
             onStatusChanged: console.log("RuntimeLoader status:", status, "errorString:", errorString)
-            onBoundsChanged: console.log("RuntimeLoader bounds:", bounds)
+            onBoundsChanged: console.log("RuntimeLoader bounds: min=", bounds.minimum, "max=", bounds.maximum)
         }
     }
 
