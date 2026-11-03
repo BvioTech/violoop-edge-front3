@@ -29,6 +29,7 @@
 | glTF 蒙皮动画（Khronos CesiumMan，骨骼数 38）渲染 | ❌ 两条 QPA 路径都失败：默认材质的蒙皮 shader 编译失败 |
 | 旋转、触摸坐标 | 未测（这轮只有固定视角场景，见"未覆盖"） |
 | 换 Qt 6.8.5（源码自己编译）是否修了 ESSL100 协商问题 | ❌ 没修，EGLFS 下复现一模一样的 `textureSize is not supported in ESSL 100`（见下方 2026-11-02 第二轮） |
+| 用 `-opengl es2` 重新编译 qtbase 是否修复 ESSL100/版本协商根因 | ✅ 修复，蒙皮 shader 编译通过，`QSurfaceFormat` 正确报告 3.2（见下方 2026-11-03 第三轮）；但暴露出一个新的、独立的骨骼动画属性绑定问题，还没解决 |
 
 **判断**：Qt Quick3D 在这台设备上跑“3D 动画”本身是可行的——硬件加速、
 weston kiosk-shell 兼容性、帧率、内存表现都通过了，且看起来明显不会复现
@@ -298,3 +299,48 @@ qtdeclarative/qtwayland/qtquicktimeline/qtquick3d 全套）本身是可行的，
   `QEGLPlatformContext::updateFormatFromGL()` 本身解析逻辑没问题——剩下
   唯一要查的是这个函数有没有在真机这个 context 上真正被调用**，细节见
   该文档。
+
+## 2026-11-03（第三轮）：根因找到并修复——不是 Qt 逻辑 bug，是构建配置错了
+
+在 `updateFormatFromGL()` 里加 `qDebug()` 实测后发现：这个函数**确实被
+调用了**，`eglMakeCurrent()` 也**确实成功**，但紧接着的
+`glGetString(GL_VERSION)` 却返回 **null**。一路查到链接层：
+`libQt6Gui.so.6` 链接的是 **GLVND 桌面 OpenGL 分发层**
+（`libOpenGL.so.0`/`libGLX.so.0`），不是 Mali 的 `libGLESv2.so`——
+因为当初 `qt-configure-module` 在 dev1 这台装了 Mesa 开发包的机器上
+自动探测成了 `FEATURE_opengl_desktop=ON`、`FEATURE_opengles2=OFF`。
+GLVND 自己维护一套"当前 context"记账，根本不知道 Mali 的 `libEGL`
+刚刚设的那个 context，所以查版本号时直接返回空。**这不是 Qt 的版本
+协商逻辑有 bug，是这套 Qt 构建从一开始就用了错的 OpenGL 后端。**
+
+用 `-opengl es2` 重新 `configure` + 完整重新编译 qtbase（以及连带
+重新编译/链接 qtshadertools/qtdeclarative/qtwayland/qtquicktimeline/
+qtquick3d 这五个依赖它的模块）之后，真机复测：
+
+```
+qt.rhi.general: Created OpenGL context QSurfaceFormat(version 3.2, ...)
+qml: RuntimeLoader status: 1 errorString: Success!
+```
+
+**不再出现** `Failed to compile vertex shader: textureSize is not
+supported in ESSL 100`，也不再出现 `WARN: Model has non-integer type
+indices for skinning`。**ESSL100/GLES 版本协商这个根因 bug 确认修复**，
+细节（含完整调试过程、具体 configure 参数）见
+`plan-patch-qt-source.md`。
+
+但同一次测试也暴露了一个新的、独立的问题：蒙皮 shader 真的开始跑之后，
+日志被刷爆（几秒内一万多条）：
+
+```
+Could not find any constructor for value type QQuickVector3DValueType to call with value QVariant(Invalid)
+Cannot set property "position"
+```
+
+定位到 `QtQuickTimeline` 的 `QQuickKeyframeGroup::setProperty()`——
+`RuntimeLoader` 运行时是靠动态生成 `QtQuickTimeline` 的 Keyframe 对象
+驱动 glTF 骨骼动画的，某个动画通道算出来的值是无效的，写不进
+`position` 属性。这是 ES3 bug 修好之后才有机会暴露出来的（之前 shader
+编译不过，这段动画代码根本跑不到）。还没做视觉渲染结果确认（这台设备
+是 KMS 直出，没有截屏手段），也还没定论这是 Qt 6.8.5 本身的 bug、还是
+`CesiumMan.glb` 这个测试模型的某个通道数据不兼容——留给下一步排查，
+见 `plan-patch-qt-source.md`"结论"一节。

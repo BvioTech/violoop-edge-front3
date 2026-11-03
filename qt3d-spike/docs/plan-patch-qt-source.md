@@ -64,7 +64,75 @@ case QRhi::OpenGLES2: {
 第 2 层给它的（错误的）版本号，不是独立的 bug，不用再花时间查这里**，
 修复要往第 2 层去找。
 
-### 第 2 层（Context 创建后的版本回填）——范围缩小到"为什么没触发"
+### 第 2 层——真正的根因找到了：qtbase 配置成了桌面 OpenGL，不是 GLES
+
+2026-11-03 在 `updateFormatFromGL()` 里加 `qDebug()` 实测（dev1，真机
+EGLFS），逐步定位到了确切原因，**不是猜测，是实测确认的**：
+
+1. `updateFormatFromGL()` **确实被调用了**（`QEGLPlatformContext::
+   initialize()` → `QOpenGLContext::create()` 链路正常触发，每次创建新
+   context 都会走到）。
+2. `eglMakeCurrent()` **确实成功**（`ok=true`，`eglGetError()=
+   EGL_SUCCESS`，`eglGetCurrentContext()` 确认当前 context 就是刚创建的
+   那个，renderableType 也确认是 `OpenGLES`）。
+3. 但紧接着调用的 `glGetString(GL_VERSION)` **返回 null**（`glGetError()`
+   同时报 `GL_NO_ERROR`）——即"EGL 认为 make-current 成功了"，但
+   "glGetString 却查不到任何东西"。换成强制走真实 pbuffer（而不是
+   surfaceless 临时 surface）结果完全一样，排除了"surfaceless
+   context 在这块驱动上有问题"这个猜测。
+4. 一路查到底层链接：
+
+   ```
+   $ ldd libQt6Gui.so.6 | grep -i "GL\|EGL"
+       libEGL.so.1 => /usr/lib/aarch64-linux-gnu/mali/libEGL.so.1   # 对的，真的是 Mali 的 EGL
+       libOpenGL.so.0 => /lib/aarch64-linux-gnu/libOpenGL.so.0      # 问题在这
+   ```
+
+   `readelf -d` 确认 `libQt6Gui.so.6` NEEDED 里有 `libGLX.so.0` +
+   `libOpenGL.so.0`——这是 **GLVND**（GL Vendor-Neutral Dispatch）的桌面
+   OpenGL 分发层，不是 Mali 的 `libGLESv2.so`。
+
+5. 根因：`~/qt6.8-build/qtbase/CMakeCache.txt` 里
+   `FEATURE_opengl_desktop=ON`、`FEATURE_opengles2=OFF`——**这套 qtbase
+   build 当时被 configure 自动探测成了"桌面 OpenGL"模式**（大概率因为
+   dev1 这台开发机上装了 Mesa 的 `libGL`/`libGLX`/`libOpenGL` dev
+   包），不是 GLES 模式。于是 `qeglplatformcontext.cpp` 里直接调用的
+   `glGetString()`/`glGetIntegerv()` 这些裸 C 符号，链接的是 **GLVND 的
+   分发层**，而 GLVND 自己维护一套"当前 context"记账，只认它知道的
+   vendor（通常是 GLX/桌面驱动），**完全不知道 Mali 的 `libEGL`
+   刚刚通过 `eglMakeCurrent()` 设的那个 context**——所以从 GLVND
+   分发层的视角看"没有当前 context"，`glGetString` 直接返回
+   null、`glGetError()` 也查不到真实错误（没有真实 context 可查）。
+
+   同时能解释"为什么非蒙皮渲染完全正常"：Quick3D/RHI 真正用来画画的 GL
+   调用，是通过 `eglGetProcAddress()` **动态**解析函数指针
+   （`QOpenGLFunctions`/`QOpenGLExtraFunctions` 的标准做法），这条路径
+   始终拿到的是 Mali 真实驱动的函数——只有 `qeglplatformcontext.cpp`
+   这几处直接写死调用裸 C 符号的地方，才会被静态链接坑到 GLVND 上。
+
+**结论**：这不是"EGL 版本协商逻辑有 bug"，是**这套 Qt 构建从一开始就配置
+错了底层 OpenGL 后端**（桌面 OpenGL/GLVND，而不是 GLES）。修复不需要改
+Qt 任何一行逆向工程出来的业务逻辑代码，只需要**用正确的 configure 参数
+重新编译 qtbase**：
+
+```bash
+cd ~/qt6.8-build/qtbase-es2   # 全新 build 目录，避免旧 cache 残留
+~/qt6.8-src/qtbase-everywhere-src-6.8.5/configure \
+    -prefix /home/admin/qt6.8 -release -opengl es2 -no-feature-xcb \
+    -nomake examples -nomake tests
+cmake --build . --parallel 8
+cmake --install .
+```
+
+配置后确认 `config.summary` 里 `Desktop OpenGL: no` / `OpenGL ES 3.2:
+yes`，`CMakeCache.txt` 里 `FEATURE_opengl_desktop=OFF` /
+`FEATURE_opengles2=ON`。2026-11-03 已经跑完 configure 并确认这两个
+开关是对的，完整编译正在进行（见下面"结论"一节的进度）。
+
+> 调试用的 `qDebug()` 日志（`[dbgpatch]` 前缀）还留在
+> `qeglplatformcontext.cpp` 里，等这条修复验证通过后要清理掉再定稿。
+
+### 第 2 层（旧记录，已被上面的实测结论取代，留档）
 
 `qtbase/src/gui/opengl/platform/egl/qeglplatformcontext.cpp` 里确实
 **有**一个负责"创建后反查真实版本"的函数——`updateFormatFromGL()`
@@ -163,13 +231,54 @@ fork 一个仓库专门构建"我们自己的 Qt"。如果这条路修好了：
 - [x] 顺带确认了`skinanim.glsllib` 的蒙皮代码本身没问题，不需要改——只要
   第 2 层修好，蒙皮会直接可以用（也因此否定了 `plan-
   custom-material-shader.md` 那条方向，不需要手写 shader）。
-- [ ] 第 2 层（`updateFormatFromGL()`）实际有没有被调用、调用时查到
-  什么——**这是现在唯一剩下的未知数**，见上面"下一步具体动作"，需要加
-  日志实测，还没做。
-- [ ] 第 1 层（EGL attrs 请求）：如果第 2 层确认"被调用但查到的就是错的
-  2.0"，才需要往这层查；如果第 2 层确认"根本没被调用"，这层不是重点，
-  重点是搞清楚 `eglfs_kms`/`wayland-egl` 的 context 创建路径。
-- [ ] patch 后 `QSurfaceFormat` 是否正确报告 3.2
-- [ ] patch 后蒙皮 shader 是否编译通过、渲染正确
-- [ ] 帧率/内存验证
-- [ ] 如果修复成功：是否启动"独立 Qt 构建仓库"的规划
+- [x] 第 2 层（`updateFormatFromGL()`）实际有没有被调用、调用时查到
+  什么——**真正根因已找到，不是版本协商逻辑本身的 bug**：这套 qtbase
+  build 当初被 configure 成了桌面 OpenGL（`FEATURE_opengl_desktop=ON`，
+  `FEATURE_opengles2=OFF`），导致 `glGetString()` 这类裸 C 符号链接到
+  GLVND 桌面分发层而不是 Mali 的 `libGLESv2.so`，GLVND 不认 Mali EGL
+  设的 context，所以查不到真实版本。详见上面"第 2 层——真正的根因找到
+  了"一节。**不需要改任何 Qt 业务逻辑代码，只需要用 `-opengl es2`
+  重新 configure + 编译 qtbase。**
+- [x] 第 1 层（EGL attrs 请求）：不再是重点——根因在构建配置层，不在
+  EGL context 创建的属性列表上，这层不需要再查。
+- [x] 用 `-opengl es2` 重新编译的 qtbase 装上后，`QSurfaceFormat` 是否
+  正确报告 3.2——**是，已真机验证**。2026-11-03 完整重新编译了
+  qtbase（GLES 配置）+ 其余五个模块（qtshadertools/qtdeclarative/
+  qtwayland/qtquicktimeline/qtquick3d，全部针对新 qtbase 重新链接），
+  装到同一个 `/home/admin/qt6.8` prefix。真机复测日志：
+  `qt.rhi.general: Created OpenGL context QSurfaceFormat(version 3.2,
+  ...)`，`updateFormatFromGL` 里 `glGetString(GL_VERSION)` 也正确拿到
+  了真实驱动字符串并解析成 major=3/minor=2——不再是 null。
+- [x] 蒙皮 shader 是否编译通过——**是**。同一次真机复测，完整日志里
+  **没有再出现** `Failed to compile vertex shader: textureSize is not
+  supported in ESSL 100`，也没有再出现 `WARN: Model has non-integer
+  type indices for skinning`，`RuntimeLoader status: 1 errorString:
+  Success!`（加载成功）。**ESSL100/GLES 版本协商这个根因 bug 确认修复。**
+- [ ] 渲染正确性——**发现了一个新的、独立的问题**，蒙皮 shader
+  编译通过后，运行时疯狂刷日志（几秒内 1 万多条）：
+  ```
+  Could not find any constructor for value type QQuickVector3DValueType to call with value QVariant(Invalid)
+  Cannot set property "position"
+  ```
+  定位到 `qtquicktimeline-everywhere-src-6.8.5/src/timeline/
+  qquickkeyframe.cpp:609` 的 `QQuickKeyframeGroup::setProperty()`——
+  说明 `RuntimeLoader` 在运行时是靠动态生成 `QtQuickTimeline`
+  的 Keyframe/Timeline 对象来驱动 glTF 骨骼动画的（和
+  `assetutils/qssgqmlutilities.cpp` 离线生成 `.qml` 文件的机制共用一套
+  转换逻辑），某个动画通道算出来的值是 `QVariant(Invalid)`，写不进
+  `position`（vector3d 类型）属性。`onBoundsChanged` 日志里 bounds 也
+  打印成空的 `QQuick3DBounds3(, )`。**这是在 ES3 bug 修好之后才暴露
+  出来的新问题**——之前 shader 编译不过，动画这段代码根本没机会跑到；
+  现在跑到了，发现了另一层 bug。还没确认这是 Qt 6.8.5 本身的 bug、还是
+  这个 GLES 构建配置引入的副作用、还是 `CesiumMan.glb` 这个测试模型的
+  某个动画通道数据跟 Quick3D 运行时导入器不兼容——需要单独排查，没有
+  做视觉渲染结果确认（没有截屏手段，这台设备是 KMS 直出，没有 weston
+  截屏）。
+- [ ] 帧率/内存验证——还没做，待动画问题解决或确认不影响渲染后再测。
+- [ ] 清理调试用的 `[dbgpatch]` qDebug 日志（在
+  `qtbase-everywhere-src-6.8.5/src/gui/opengl/platform/egl/
+  qeglplatformcontext.cpp`）
+- [ ] 如果修复成功：是否启动"独立 Qt 构建仓库"的规划——而且现在范围更
+  明确了：不是要维护一个"改过业务逻辑的 patch"，只是要维护一份
+  **正确的 configure 参数清单**（`-opengl es2` 等），风险和维护成本比
+  原来设想的"改 Qt 源码逻辑"低很多。
