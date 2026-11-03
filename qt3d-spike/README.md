@@ -31,7 +31,8 @@ qt3d-spike/
     ├── findings.md                       # 真机测试记录与结论（已有完整真机结果，不止是待办清单）
     ├── plan-custom-material-shader.md     # 方向 A：自定义材质手写 ES3 shader，绕开默认材质
     ├── plan-patch-qt-source.md            # 方向 B：直接改 Qt 源码定位修复版本协商 bug
-    └── plan-qt-fork-and-build.md          # 产品化计划：fork qtquicktimeline、打包、发私有源（纯计划，未执行）
+    ├── plan-qt-fork-and-build.md          # 产品化计划：fork qtquicktimeline、打包、发私有源（已执行，见文件内"执行结果"）
+    └── handoff-qt-build-glibc-mismatch.md # 交接：发布的 .deb 在目标设备上因 glibc/ICU 版本不匹配完全跑不起来，待修
 ```
 
 `assets/`（`fetch-assets.sh` 的输出目录）不入库，是下载下来的 Khronos 官方

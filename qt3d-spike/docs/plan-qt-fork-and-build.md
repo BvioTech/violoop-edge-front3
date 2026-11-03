@@ -1,9 +1,11 @@
 # 方向 C（产品化）：fork Qt、打包、发到私有源
 
-> 这份文档只是计划，**还没有执行任何一步**（没有 fork、没有建仓库、没
-> 有发布）。背景和两个真实 bug 的完整调查过程见 `findings.md` 和
-> `plan-patch-qt-source.md`——这里只接着往下规划"怎么把 dev1 上手动跑通
-> 的那套 Qt，变成能长期维护、能装到别的设备上的东西"。
+> **已执行完成。** `BvioTech/qtquicktimeline`（fork + 补丁）和
+> `BvioTech/violoop-qt-build`（构建脚本 + CI）都已经建好，`.deb` 已经
+> 发布到 `violoop-qt-build` 的 GitHub Release：
+> https://github.com/BvioTech/violoop-qt-build/releases/tag/v6.8.5-violoop1
+> （`violoop-qt6_6.8.5-violoop1_arm64.deb`，单一打包，不是 6 个模块分开发）。
+> 下面原计划内容保留作为背景记录；最新状态见本文件末尾"执行结果"一节。
 
 ## 背景：到底需要改什么
 
@@ -95,9 +97,42 @@ dev1 上跑通骨骼动画，实际依赖两类改动：
 
 ## 结论 / 待办
 
-- [ ] fork `qt/qtquicktimeline` 到 `BvioTech/qtquicktimeline`
-- [ ] 在 `v6.8.5` 基础上提交 off-by-one 修复，打 `v6.8.5-violoop1` 标签
-- [ ] （可选）把修复提给 Qt 官方 Gerrit
-- [ ] 新建 `violoop-qt-build` 仓库，写构建脚本（固定 `-opengl es2`，
-  独立安装 prefix，产出 `.deb`）
-- [ ] 发布目标/流程——留给下一步单独讨论
+- [x] fork `qt/qtquicktimeline` 到 `BvioTech/qtquicktimeline`
+- [x] 在官方 `v6.8.5-lts-lgpl` 基础上提交 off-by-one 修复，打
+  `v6.8.5-violoop1` 标签
+- [ ] （可选）把修复提给 Qt 官方 Gerrit——仍未做，留作独立任务
+- [x] 新建 `violoop-qt-build` 仓库，写构建脚本（固定 `-opengl es2`，
+  独立安装 prefix 默认 `/opt/violoop-qt6`，产出单一 `.deb`，CI 在
+  arm64 原生 runner 上构建+发 Release）
+- [ ] 发布目标/流程（私有 APT 仓库接入）——留给下一步单独讨论
+
+## 执行结果（2026-11-03）
+
+- 仓库：`BvioTech/qtquicktimeline`（fork，分支 `violoop/v6.8.5`，标签
+  `v6.8.5-violoop1`）、`BvioTech/violoop-qt-build`（构建脚本 + CI）。
+- 发布：https://github.com/BvioTech/violoop-qt-build/releases/tag/v6.8.5-violoop1
+  —— `violoop-qt6_6.8.5-violoop1_arm64.deb`（46MB，单一打包，对应下面
+  "是否单独发布还是打包发布"的讨论结果：选了**打包成一个包**）。
+- 模块来源：`qtbase`/`qtshadertools`/`qtdeclarative`/`qtwayland`/
+  `qtquick3d` 直接引用官方标签 `v6.8.5-lts-lgpl`（注意不是裸的
+  `v6.8.5`）；只有 `qtquicktimeline` 用自己 fork 的 `v6.8.5-violoop1`。
+- `violoop-qt-build` 仓库本身以 **GPL-3.0-or-later** 开源（构建脚本/
+  `modules.conf`/CI/文档）——对应前面"构建 Qt 包的仓库需不需要开源"的
+  讨论结论：是，已经做成公开仓库，和 `edge-front3` 本身的 GPL-3 发布
+  保持一致姿态。不影响打包进 `.deb` 里的 Qt 源码本身各自的授权（源码
+  只在构建时拉取到 `.gitignore` 掉的 `src/` 目录，不提交进仓库）。
+- 构建机：GitHub Actions `ubuntu-24.04-arm`（arm64 原生，非交叉编译）。
+
+### ⚠️ 已知问题：这个 `.deb` 目前在 dev1 上完全跑不起来（阻塞）
+
+装到 dev1 之后 `qmake6` 自己都起不来（缺 `libicui18n.so.74`），
+`libQt6Gui`/`libQt6Quick3D` 等几乎所有库要求 `GLIBC_2.38`，而 dev1
+（Debian 12 bookworm）只有 glibc 2.36。根因是 CI 直接在 `ubuntu-24.04-arm`
+宿主上构建（glibc 2.38/ICU 74），跟目标设备（bookworm，glibc
+2.36/ICU 72）不匹配，不是 Qt 补丁本身或构建参数的问题。
+
+完整分析、修复方案、验证步骤已经写成独立的交接文档，交给另一个 agent/
+人接手：**`handoff-qt-build-glibc-mismatch.md`**。
+
+**在这个问题修好、真机验证通过之前：dev1 上手工编译的那套 Qt
+（`/home/admin/qt6.8` 等）不能删**，目前它是唯一真正能跑的版本。
