@@ -65,7 +65,7 @@ Item {
             Row {
                 spacing: 16
                 Button { text: "< 返回"; onClicked: nav.pop() }
-                Text { text: "调试"; color: "white"; font.pixelSize: 26; anchors.verticalCenter: parent.verticalCenter }
+                Text { text: "调试"; color: "white"; font.pixelSize: 46; anchors.verticalCenter: parent.verticalCenter }
             }
 
             ActionCard {
@@ -73,7 +73,7 @@ Item {
                 title: "设备状态"
                 Text {
                     color: "#cccccc"
-                    font.pixelSize: 14
+                    font.pixelSize: 24
                     text: "wifi=" + statusStore.wifiConnected + " hdmi=" + statusStore.hdmiConnected
                         + " usbHost=" + statusStore.usbHostConnected + " pairingSerial=" + statusStore.pairingSerialOpen
                 }
@@ -97,7 +97,7 @@ Item {
                         restClient.postJson("/sign/request-authorization", "{}")
                     }
                 }
-                Text { color: "#cccccc"; font.pixelSize: 13; wrapMode: Text.WordWrap; width: parent.width; text: root.authorizeResult }
+                Text { color: "#cccccc"; font.pixelSize: 22; wrapMode: Text.WordWrap; width: parent.width; text: root.authorizeResult }
             }
 
             ActionCard {
@@ -113,7 +113,7 @@ Item {
                     }
                     Button { text: "读取当前音量"; onClicked: restClient.get("/audio/volume") }
                 }
-                Text { color: "#cccccc"; font.pixelSize: 13; text: root.volumeResult }
+                Text { color: "#cccccc"; font.pixelSize: 22; text: root.volumeResult }
             }
 
             ActionCard {
@@ -126,7 +126,7 @@ Item {
                         restClient.postJson("/debug/push", JSON.stringify({title: "调试", body: "来自 Qt 调试页的测试推送"}))
                     }
                 }
-                Text { color: "#cccccc"; font.pixelSize: 13; wrapMode: Text.WordWrap; width: parent.width; text: root.pushResult }
+                Text { color: "#cccccc"; font.pixelSize: 22; wrapMode: Text.WordWrap; width: parent.width; text: root.pushResult }
             }
 
             ActionCard {
@@ -146,7 +146,7 @@ Item {
                         onClicked: restClient.postJson("/upgrade/debug/progress?scenario=cancel", "{}")
                     }
                 }
-                Text { color: "#cccccc"; font.pixelSize: 13; wrapMode: Text.WordWrap; width: parent.width; text: root.replayResult }
+                Text { color: "#cccccc"; font.pixelSize: 22; wrapMode: Text.WordWrap; width: parent.width; text: root.replayResult }
             }
 
             ActionCard {
@@ -163,7 +163,7 @@ Item {
                         onClicked: restClient.postJson("/audio/factory-test/cleanup", "{}")
                     }
                 }
-                Text { color: "#cccccc"; font.pixelSize: 13; text: root.resourceResult }
+                Text { color: "#cccccc"; font.pixelSize: 22; text: root.resourceResult }
             }
 
             ActionCard {
@@ -174,7 +174,7 @@ Item {
                     Button { text: "开启"; onClicked: restClient.postJson("/ssh/enable", "{}") }
                     Button { text: "关闭"; onClicked: restClient.postJson("/ssh/disable", "{}") }
                 }
-                Text { color: "#cccccc"; font.pixelSize: 13; text: root.sshResult }
+                Text { color: "#cccccc"; font.pixelSize: 22; text: root.sshResult }
             }
 
             ActionCard {
@@ -182,7 +182,7 @@ Item {
                 title: "恢复出厂设置"
                 Text {
                     color: "#e57373"
-                    font.pixelSize: 13
+                    font.pixelSize: 22
                     wrapMode: Text.WordWrap
                     width: parent.width
                     text: "注意: armed/rebootRequired 之后绝不能热重启（面板会黑屏锁死），必须物理断电重启。"
@@ -201,7 +201,7 @@ Item {
                 Text {
                     visible: factoryResetState === "confirm"
                     color: "#ffb300"
-                    font.pixelSize: 13
+                    font.pixelSize: 22
                     text: "再次点击确认执行恢复出厂设置"
                 }
             }

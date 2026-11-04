@@ -24,6 +24,6 @@ Rectangle {
         anchors.margins: 16
         spacing: 8
 
-        Text { text: root.title; color: "white"; font.pixelSize: 20; font.bold: true }
+        Text { text: root.title; color: "white"; font.pixelSize: 34; font.bold: true }
     }
 }

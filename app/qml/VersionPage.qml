@@ -31,7 +31,7 @@ Item {
                 // No anchors.verticalCenter - Flow doesn't support
                 // anchors on its children (see TestLandingPage.qml's
                 // equivalent comment).
-                Text { text: "版本和升级"; color: "white"; font.pixelSize: 26; topPadding: 14 }
+                Text { text: "版本和升级"; color: "white"; font.pixelSize: 46; topPadding: 14 }
                 Button { text: "刷新"; onClicked: upgradeStore.refreshAll() }
                 Button {
                     text: upgradeStore.triggering ? "触发中..." : "立即升级"
@@ -42,7 +42,7 @@ Item {
             Text {
                 visible: upgradeStore.triggerError.length > 0
                 color: "#e57373"
-                font.pixelSize: 13
+                font.pixelSize: 22
                 text: "触发失败: " + upgradeStore.triggerError
             }
 
@@ -51,18 +51,18 @@ Item {
                 title: "升级进度"
                 Text {
                     color: upgradeStore.unreachable ? "#ffb300" : "white"
-                    font.pixelSize: 15
+                    font.pixelSize: 26
                     text: upgradeStore.unreachable ? "升级中，设备暂时不可达（正在重连）..." : (upgradeStore.upgrading ? "升级进行中" : "空闲")
                 }
                 Text {
                     visible: upgradeStore.stalled
                     color: "#e57373"
-                    font.pixelSize: 14
+                    font.pixelSize: 24
                     text: "进度已停滞 " + upgradeStore.progressAgeSeconds + " 秒"
                 }
                 Text {
                     color: "#cccccc"
-                    font.pixelSize: 14
+                    font.pixelSize: 24
                     text: {
                         const p = upgradeStore.progress
                         if (!p || Object.keys(p).length === 0) return "(无进度记录)"
@@ -81,7 +81,7 @@ Item {
                     }
                     delegate: Text {
                         color: "#9e9e9e"
-                        font.pixelSize: 13
+                        font.pixelSize: 22
                         text: modelData.name + ": " + modelData.from + " → " + modelData.to
                     }
                 }
@@ -92,7 +92,7 @@ Item {
                 title: "服务版本"
                 Text {
                     color: "white"
-                    font.pixelSize: 14
+                    font.pixelSize: 24
                     text: {
                         const v = upgradeStore.versions
                         const s = (v && v.service) ? v.service : {}
@@ -106,7 +106,7 @@ Item {
                 title: "系统信息"
                 Text {
                     color: "white"
-                    font.pixelSize: 14
+                    font.pixelSize: 24
                     text: {
                         const v = upgradeStore.versions
                         const os = (v && v.os) ? v.os : {}
@@ -129,7 +129,7 @@ Item {
                         }
                         delegate: Text {
                             color: modelData.info.installed ? "#cccccc" : "#666666"
-                            font.pixelSize: 13
+                            font.pixelSize: 22
                             text: modelData.name + ": " + (modelData.info.installed ? modelData.info.version : "未安装")
                         }
                     }
@@ -141,7 +141,7 @@ Item {
                 title: "升级单元状态"
                 Text {
                     color: "white"
-                    font.pixelSize: 14
+                    font.pixelSize: 24
                     text: {
                         const s = upgradeStore.status
                         if (!s || Object.keys(s).length === 0) return "(无数据)"
@@ -153,7 +153,7 @@ Item {
                 Text {
                     visible: upgradeStore.statusError.length > 0
                     color: "#e57373"
-                    font.pixelSize: 13
+                    font.pixelSize: 22
                     text: "状态读取失败: " + upgradeStore.statusError
                 }
             }

@@ -41,7 +41,7 @@ Item {
         Row {
             spacing: 16
             Button { text: "< 返回"; onClicked: nav.pop() }
-            Text { text: "WiFi 配置"; color: "white"; font.pixelSize: 24; anchors.verticalCenter: parent.verticalCenter }
+            Text { text: "WiFi 配置"; color: "white"; font.pixelSize: 42; anchors.verticalCenter: parent.verticalCenter }
         }
 
         Row {
@@ -53,7 +53,7 @@ Item {
                     restClient.postJson("/wifi/scan", "{}")
                 }
             }
-            Text { color: "#cccccc"; font.pixelSize: 14; anchors.verticalCenter: parent.verticalCenter; text: scanStatus }
+            Text { color: "#cccccc"; font.pixelSize: 24; anchors.verticalCenter: parent.verticalCenter; text: scanStatus }
         }
 
         WifiScanList {
@@ -74,6 +74,6 @@ Item {
                 }
             }
         }
-        Text { color: "#cccccc"; font.pixelSize: 14; text: connectStatus }
+        Text { color: "#cccccc"; font.pixelSize: 24; text: connectStatus }
     }
 }

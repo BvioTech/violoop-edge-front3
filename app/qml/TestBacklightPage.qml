@@ -26,7 +26,7 @@ TestPageFrame {
 
     Column {
         spacing: 16
-        Text { color: "white"; font.pixelSize: 17; text: "当前亮度: " + currentPercent + "%" }
+        Text { color: "white"; font.pixelSize: 30; text: "当前亮度: " + currentPercent + "%" }
         Slider {
             width: 400
             from: 0

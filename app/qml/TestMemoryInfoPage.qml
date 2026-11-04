@@ -32,8 +32,8 @@ TestPageFrame {
 
     Column {
         spacing: 8
-        Text { color: "white"; font.pixelSize: 17; text: "DDR: " + gb(info.ddr ? info.ddr.totalBytes : undefined) }
-        Text { color: "white"; font.pixelSize: 17; text: "存储: " + gb(info.storage ? info.storage.sizeBytes : undefined) }
-        Text { color: "white"; font.pixelSize: 17; text: "存储设备: " + (info.storage ? info.storage.device : "-") }
+        Text { color: "white"; font.pixelSize: 30; text: "DDR: " + gb(info.ddr ? info.ddr.totalBytes : undefined) }
+        Text { color: "white"; font.pixelSize: 30; text: "存储: " + gb(info.storage ? info.storage.sizeBytes : undefined) }
+        Text { color: "white"; font.pixelSize: 30; text: "存储设备: " + (info.storage ? info.storage.device : "-") }
     }
 }

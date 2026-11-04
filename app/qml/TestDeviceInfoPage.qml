@@ -31,11 +31,11 @@ TestPageFrame {
 
     Column {
         spacing: 8
-        Text { color: "white"; font.pixelSize: 17; text: "CPU 型号: " + (info.cpu ? info.cpu.model : "-") }
-        Text { color: "white"; font.pixelSize: 17; text: "MCU 型号: " + (info.mcu ? info.mcu.model : "-") }
-        Text { color: "white"; font.pixelSize: 17; text: "主板档位: " + (info.boardProfile ?? "-") + " (" + (info.boardProfileSource ?? "-") + ")" }
-        Text { color: "white"; font.pixelSize: 17; text: "面板型号: " + (info.panel ? info.panel.model : "-") }
-        Text { color: "white"; font.pixelSize: 17; text: "区域: " + (info.region ?? "-") + " (" + (info.regionSource ?? "-") + ")" }
-        Text { color: "white"; font.pixelSize: 17; text: "SN: " + (info.sn ?? "-") }
+        Text { color: "white"; font.pixelSize: 30; text: "CPU 型号: " + (info.cpu ? info.cpu.model : "-") }
+        Text { color: "white"; font.pixelSize: 30; text: "MCU 型号: " + (info.mcu ? info.mcu.model : "-") }
+        Text { color: "white"; font.pixelSize: 30; text: "主板档位: " + (info.boardProfile ?? "-") + " (" + (info.boardProfileSource ?? "-") + ")" }
+        Text { color: "white"; font.pixelSize: 30; text: "面板型号: " + (info.panel ? info.panel.model : "-") }
+        Text { color: "white"; font.pixelSize: 30; text: "区域: " + (info.region ?? "-") + " (" + (info.regionSource ?? "-") + ")" }
+        Text { color: "white"; font.pixelSize: 30; text: "SN: " + (info.sn ?? "-") }
     }
 }

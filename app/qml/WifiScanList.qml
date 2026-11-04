@@ -15,7 +15,7 @@ Column {
         model: root.items
         delegate: Rectangle {
             width: root.width
-            height: 44
+            height: 60 // bumped for the larger content font (see AppShell.qml's app-wide button font; this row's own text sizes grew alongside it)
             color: "#202020"
             border.color: "#3a3a3a"
 
@@ -26,20 +26,20 @@ Column {
                 Text {
                     text: modelData.ssid !== undefined ? modelData.ssid : "(hidden)"
                     color: "white"
-                    font.pixelSize: 16
-                    width: 220
+                    font.pixelSize: 28
+                    width: 320
                     elide: Text.ElideRight
                 }
                 Text {
                     text: modelData.signal !== undefined ? (modelData.signal + "%")
                         : modelData.rssi !== undefined ? (modelData.rssi + " dBm") : ""
                     color: "#9e9e9e"
-                    font.pixelSize: 14
+                    font.pixelSize: 24
                 }
                 Text {
                     text: modelData.security !== undefined ? modelData.security : ""
                     color: "#9e9e9e"
-                    font.pixelSize: 14
+                    font.pixelSize: 24
                 }
             }
 

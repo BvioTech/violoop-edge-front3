@@ -37,6 +37,6 @@ TestPageFrame {
             Button { text: "全速 (100%)"; onClicked: run(100) }
             Button { text: "停止 (0%)"; onClicked: run(0) }
         }
-        Text { color: "white"; font.pixelSize: 15; wrapMode: Text.WordWrap; width: 500; text: resultText }
+        Text { color: "white"; font.pixelSize: 26; wrapMode: Text.WordWrap; width: 500; text: resultText }
     }
 }

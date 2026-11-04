@@ -37,6 +37,6 @@ TestPageFrame {
                 restClient.postJson("/power/factory-test/check", "{}")
             }
         }
-        Text { color: "white"; font.pixelSize: 13; wrapMode: Text.WordWrap; width: 600; text: resultText }
+        Text { color: "white"; font.pixelSize: 22; wrapMode: Text.WordWrap; width: 600; text: resultText }
     }
 }

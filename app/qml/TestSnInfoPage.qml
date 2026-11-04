@@ -21,7 +21,7 @@ TestPageFrame {
     Text {
         id: snText
         color: "white"
-        font.pixelSize: 24
+        font.pixelSize: 42
         text: "SN: -"
     }
 }

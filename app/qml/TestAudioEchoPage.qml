@@ -44,6 +44,6 @@ TestPageFrame {
                 restClient.postJson("/audio/factory-test/capture?ms=3000", "{}")
             }
         }
-        Text { color: "white"; font.pixelSize: 15; wrapMode: Text.WordWrap; width: 500; text: statusText }
+        Text { color: "white"; font.pixelSize: 26; wrapMode: Text.WordWrap; width: 500; text: statusText }
     }
 }

@@ -10,7 +10,7 @@ TestPageFrame {
 
     Text {
         color: "#bbbbbb"
-        font.pixelSize: 16
+        font.pixelSize: 28
         text: "纯目测测试，无接口调用。"
     }
 }

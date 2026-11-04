@@ -58,6 +58,6 @@ TestPageFrame {
                     JSON.stringify({path: modelData.path, loop: true}))
             }
         }
-        Text { color: "#bbbbbb"; font.pixelSize: 14; wrapMode: Text.WordWrap; width: 500; text: resultText }
+        Text { color: "#bbbbbb"; font.pixelSize: 24; wrapMode: Text.WordWrap; width: 500; text: resultText }
     }
 }

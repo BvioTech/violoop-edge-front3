@@ -20,7 +20,7 @@ Row {
         Text {
             anchors.verticalCenter: parent.verticalCenter
             color: "white"
-            font.pixelSize: 16
+            font.pixelSize: 28
             text: "WiFi" + (statusStore.wifiKnown && statusStore.wifiConnected ? (" " + statusStore.wifiSignal + "%") : "")
         }
     }
@@ -37,7 +37,7 @@ Row {
         Text {
             anchors.verticalCenter: parent.verticalCenter
             color: "white"
-            font.pixelSize: 16
+            font.pixelSize: 28
             text: "云端" + (statusStore.connectivityKnown && statusStore.connectivityOk ? (" " + statusStore.connectivityLatencyMs + "ms") : "")
         }
     }
@@ -53,7 +53,7 @@ Row {
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 color: "white"
-                font.pixelSize: 16
+                font.pixelSize: 28
                 text: modelData.label
             }
         }
@@ -65,7 +65,7 @@ Row {
             anchors.verticalCenter: parent.verticalCenter
             state: !statusStore.hardwareKnown ? "neutral" : statusStore.usbHostConnected ? "ok" : "error"
         }
-        Text { anchors.verticalCenter: parent.verticalCenter; color: "white"; font.pixelSize: 16; text: "USB" }
+        Text { anchors.verticalCenter: parent.verticalCenter; color: "white"; font.pixelSize: 28; text: "USB" }
     }
 
     Row {
@@ -74,6 +74,6 @@ Row {
             anchors.verticalCenter: parent.verticalCenter
             state: !statusStore.hardwareKnown ? "neutral" : statusStore.pairingSerialOpen ? "ok" : "error"
         }
-        Text { anchors.verticalCenter: parent.verticalCenter; color: "white"; font.pixelSize: 16; text: "配对口" }
+        Text { anchors.verticalCenter: parent.verticalCenter; color: "white"; font.pixelSize: 28; text: "配对口" }
     }
 }

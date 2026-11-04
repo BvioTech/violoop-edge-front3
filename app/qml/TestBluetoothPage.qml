@@ -44,13 +44,13 @@ TestPageFrame {
                     restClient.postJson("/bluetooth/factory-test/scan", "{}")
                 }
             }
-            Text { color: "white"; font.pixelSize: 15; anchors.verticalCenter: parent.verticalCenter; text: summaryText }
+            Text { color: "white"; font.pixelSize: 26; anchors.verticalCenter: parent.verticalCenter; text: summaryText }
         }
         Repeater {
             model: devices
             delegate: Text {
                 color: "#cccccc"
-                font.pixelSize: 14
+                font.pixelSize: 24
                 text: modelData.name + " (" + modelData.address + ") rssi=" + modelData.rssi
             }
         }

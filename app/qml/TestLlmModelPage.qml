@@ -34,8 +34,8 @@ TestPageFrame {
 
     Column {
         spacing: 8
-        Text { color: "white"; font.pixelSize: 17; text: "状态: " + (info.status ?? "-") }
-        Text { color: "white"; font.pixelSize: 17; text: "已加载模型: " + (info.loaded_model ?? "-") }
-        Text { color: "white"; font.pixelSize: 17; text: "队列深度: " + (info.queue_depth !== undefined ? info.queue_depth : "-") }
+        Text { color: "white"; font.pixelSize: 30; text: "状态: " + (info.status ?? "-") }
+        Text { color: "white"; font.pixelSize: 30; text: "已加载模型: " + (info.loaded_model ?? "-") }
+        Text { color: "white"; font.pixelSize: 30; text: "队列深度: " + (info.queue_depth !== undefined ? info.queue_depth : "-") }
     }
 }

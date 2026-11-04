@@ -18,7 +18,7 @@ Item {
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
             color: "#666666"
-            font.pixelSize: 18
+            font.pixelSize: 32
             text: "主页（占位，无设计稿）"
         }
 

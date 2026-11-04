@@ -41,6 +41,6 @@ TestPageFrame {
                 restClient.postJson("/wifi/factory-test/scan", "{}")
             }
         }
-        Text { color: "white"; font.pixelSize: 15; wrapMode: Text.WordWrap; width: 500; text: resultText }
+        Text { color: "white"; font.pixelSize: 26; wrapMode: Text.WordWrap; width: 500; text: resultText }
     }
 }

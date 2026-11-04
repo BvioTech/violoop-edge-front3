@@ -31,9 +31,9 @@ TestPageFrame {
 
     Column {
         spacing: 8
-        Text { color: "white"; font.pixelSize: 17; text: "型号: " + (info.model ?? "-") }
-        Text { color: "white"; font.pixelSize: 17; text: "状态: " + (info.deviceStatus ?? "-") + " / 健康: " + (info.health ?? "-") }
-        Text { color: "white"; font.pixelSize: 17; text: "温度: " + (info.temperatureC !== undefined ? info.temperatureC + "°C" : "-") }
-        Text { color: "white"; font.pixelSize: 17; text: "固件: " + (info.firmwareVersion ?? "-") + " / 软件: " + (info.softwareVersion ?? "-") }
+        Text { color: "white"; font.pixelSize: 30; text: "型号: " + (info.model ?? "-") }
+        Text { color: "white"; font.pixelSize: 30; text: "状态: " + (info.deviceStatus ?? "-") + " / 健康: " + (info.health ?? "-") }
+        Text { color: "white"; font.pixelSize: 30; text: "温度: " + (info.temperatureC !== undefined ? info.temperatureC + "°C" : "-") }
+        Text { color: "white"; font.pixelSize: 30; text: "固件: " + (info.firmwareVersion ?? "-") + " / 软件: " + (info.softwareVersion ?? "-") }
     }
 }

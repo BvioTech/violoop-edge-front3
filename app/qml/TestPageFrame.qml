@@ -57,7 +57,7 @@ Item {
             Text {
                 text: root.title
                 color: "white"
-                font.pixelSize: 26
+                font.pixelSize: 46
                 anchors.verticalCenter: parent.verticalCenter
             }
             StatusDot {
@@ -70,7 +70,7 @@ Item {
             visible: root.description.length > 0
             text: root.description
             color: "#bbbbbb"
-            font.pixelSize: 16
+            font.pixelSize: 28
             width: parent.width
             wrapMode: Text.WordWrap
         }

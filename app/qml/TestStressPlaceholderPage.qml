@@ -17,13 +17,13 @@ Item {
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
             color: "#999999"
-            font.pixelSize: 18
+            font.pixelSize: 32
             text: "压力测试 / 老化测试 — 占位，未实现"
         }
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
             color: "#666666"
-            font.pixelSize: 14
+            font.pixelSize: 24
             text: "对应 edge-front2 的 /stress 页面，本轮范围未覆盖"
         }
         Button {

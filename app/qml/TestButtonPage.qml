@@ -45,6 +45,6 @@ TestPageFrame {
                 restClient.postJson("/sign/factory-test/button", "{}")
             }
         }
-        Text { color: "white"; font.pixelSize: 14; wrapMode: Text.WordWrap; width: 500; text: resultText }
+        Text { color: "white"; font.pixelSize: 24; wrapMode: Text.WordWrap; width: 500; text: resultText }
     }
 }

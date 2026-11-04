@@ -37,7 +37,7 @@ Item {
                 Text {
                     text: "工厂测试"
                     color: "white"
-                    font.pixelSize: 24
+                    font.pixelSize: 42
                     // No anchors.verticalCenter here - Flow doesn't
                     // support anchors on its children at all ("Flow will
                     // not function" warning, caught offline before this
@@ -51,7 +51,7 @@ Item {
 
             Text {
                 color: "#9e9e9e"
-                font.pixelSize: 15
+                font.pixelSize: 26
                 text: {
                     const s = testVerdictStore.summary
                     return "通过 " + s.passed + " / 不通过 " + s.failed + " / 待测 " + s.pending + " / 共 " + s.total
@@ -72,7 +72,7 @@ Item {
 
         delegate: Rectangle {
             width: ListView.view.width
-            height: 52
+            height: 68 // bumped for the larger content font (see AppShell.qml)
             color: "#1b1b1b"
             border.color: "#333333"
             radius: 4
@@ -91,7 +91,7 @@ Item {
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
                     color: "white"
-                    font.pixelSize: 18
+                    font.pixelSize: 32
                     text: modelData.title
                 }
             }

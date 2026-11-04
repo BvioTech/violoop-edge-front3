@@ -37,6 +37,6 @@ TestPageFrame {
                 restClient.postJson("/usb-input/factory-test/probe", "{}")
             }
         }
-        Text { color: "white"; font.pixelSize: 14; wrapMode: Text.WordWrap; width: 600; text: resultText }
+        Text { color: "white"; font.pixelSize: 24; wrapMode: Text.WordWrap; width: 600; text: resultText }
     }
 }

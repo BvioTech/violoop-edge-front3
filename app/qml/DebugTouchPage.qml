@@ -19,7 +19,7 @@ Item {
     Rectangle {
         id: header
         width: parent.width
-        height: 120 // bumped for the larger app-wide button font (see AppShell.qml)
+        height: 140 // bumped again for the larger content font too (see AppShell.qml)
         color: "#181818"
         Column {
             anchors.fill: parent
@@ -28,11 +28,11 @@ Item {
             Row {
                 spacing: 16
                 Button { text: "< 返回"; onClicked: nav.pop() }
-                Text { text: "触摸诊断"; color: "white"; font.pixelSize: 22; anchors.verticalCenter: parent.verticalCenter }
+                Text { text: "触摸诊断"; color: "white"; font.pixelSize: 38; anchors.verticalCenter: parent.verticalCenter }
             }
             Text {
                 color: "#9e9e9e"
-                font.pixelSize: 14
+                font.pixelSize: 24
                 text: "down=" + root.downCount + " up=" + root.upCount + " cancel=" + root.cancelCount
             }
         }
@@ -90,7 +90,7 @@ Item {
                 Text {
                     anchors.centerIn: parent
                     color: "white"
-                    font.pixelSize: 12
+                    font.pixelSize: 20
                     text: "#" + modelData.pointId + "\np=" + modelData.pressure.toFixed(2)
                 }
             }
@@ -105,6 +105,6 @@ Item {
         height: 180
         clip: true
         model: root.log
-        delegate: Text { color: "#888888"; font.pixelSize: 12; text: modelData }
+        delegate: Text { color: "#888888"; font.pixelSize: 20; text: modelData }
     }
 }
