@@ -381,3 +381,48 @@ runner 上跑，不做交叉编译；同样靠打 `v*` tag 触发、`workflow_di
 检查（控制信息、文件列表）已经通过，但没有真机验证过 `postinst`
 实际执行、依赖解析是否都满足——如果要继续往前推进这条打包链路，这步
 最好让用户自己跑一次确认，或者明确给这个会话 remote shell 写权限。
+
+### 2026-11-04（同一天）：CI 真机跑才发现两个坑，都靠真的触发 CI 查出来的
+
+用户手动触发了 `build-release.yml`（`workflow_dispatch`），报错
+"Unable to locate package violoop-qt6"。排查（不是猜）：
+
+1. **直接 curl `deb.violoop.ai` 的 `Packages` 索引文件**（`dists/stable/
+   main/binary-arm64/Packages`、`dists/testing/.../Packages`
+   两个都查了），确认 `violoop-qt6` 真的不在这个 apt 源里——即使
+   `apt/repos.yaml`（独立的 `BvioTech/apt` 仓库）确实在追踪它，即使
+   `BvioTech/violoop-qt-build` 确实有一个正式的（非 draft/非
+   prerelease）`v6.8.5-violoop3` release、带着期望的
+   `violoop-qt6_*_arm64.deb` 资产，发布超过一天了。
+2. 用 `gh run list --repo BvioTech/violoop-qt-build` 查那边的 CI，发现
+   它的 release workflow **根本没有"通知 apt 服务"这一步**（不像这个
+   仓库自己的 `build-release.yml` 有）——完全依赖 apt 服务自己的"每小时
+   兜底同步"去发现新 release。同步了一天多还没捞到，具体是 apt 服务哪里
+   出了问题不在这个仓库能查的范围内。
+
+**修复**：不再依赖 `deb.violoop.ai`（CI 不应该依赖一个自己控制不了、
+当前明显卡住了的第三方同步服务），改成直接从
+`api.github.com/repos/BvioTech/violoop-qt-build/releases/latest` 解析
+`violoop-qt6_*_arm64.deb` 资产的下载链接，`curl` 下来之后
+`apt-get install -y ./文件.deb`（这个命令本来就会正常从 Ubuntu 自带源
+解析 `Depends`，不需要额外的包源）。本地验证过这个 URL 解析逻辑和真实
+下载都没问题，才改两个 workflow 文件。
+
+修完这个之后重新触发，**暴露了第二个坑**：`cmake configure` 报
+"Could NOT find EGL"/"Could NOT find GLESv2"，`Qt6Gui` 找不到。
+`violoop-qt6` 包的 `Depends` 只列了运行时库（`libegl1`、`libgles2`
+等），不含开发头文件——`Qt6Gui` 自己的 CMake 配置会transitively
+`find_package()` EGL/GLESv2/XKB，这几个开发包不是 `violoop-qt6` 的责任，
+是构建环境自己要装的。dev1 这台设备因为之前几轮 spike 已经装过
+`libegl1-mesa-dev`/`libegl-dev`/`libgles-dev`，这个缺口一直没暴露，
+干净的 GitHub Actions runner 上才第一次踩到。加了
+`libegl1-mesa-dev libgles2-mesa-dev libxkbcommon-dev` 到两个 workflow
+的构建工具链安装步骤。
+
+两次修复都是**真的用 `gh workflow run` 触发、`gh run watch` 等到真实
+结果**才确认修好的，不是改完猜应该行了就算完——第一次修复后重新触发，
+"Install violoop-qt6" 这步确认过了，但下一步"离屏冒烟测试"的 cmake
+configure 才炸出第二个坑；第二次修复后再触发，整条流水线（装依赖→
+离屏冒烟测试→构建 `.deb`→校验和→上传产物）全部跑通，`release` job
+按预期跳过（`workflow_dispatch` 触发不满足 `startsWith(github.ref,
+'refs/tags/v')` 条件，这是故意的，不是 bug）。
