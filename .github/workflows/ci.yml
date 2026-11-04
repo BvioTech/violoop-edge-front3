@@ -1,0 +1,71 @@
+name: CI
+
+# PR validation only - build-release.yml (tag push / workflow_dispatch)
+# handles the actual .deb build and release. This just needs to catch
+# compile errors and QML load errors before merge; no separate test
+# framework exists for this C++/QML project yet.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "app/**"
+      - ".github/workflows/ci.yml"
+
+defaults:
+  run:
+    working-directory: app
+
+jobs:
+  build-and-smoke-test:
+    # Native arm64 runner, not cross-compiled - violoop-qt6 (the Qt
+    # runtime this links against, see README.md) only ships an arm64
+    # build, same reasoning as build-release.yml.
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install build toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++ pkg-config curl ca-certificates gnupg
+
+      - name: Add the violoop apt repo (for violoop-qt6)
+        # Public repo, no credentials needed to read from it - see
+        # ../../../apt/README.md (BvioTech/apt).
+        run: |
+          curl -fsSL https://deb.violoop.ai/public-key.asc \
+            | gpg --dearmor | sudo tee /etc/apt/keyrings/violoop.gpg >/dev/null
+          echo "Types: deb
+          URIs: https://deb.violoop.ai
+          Suites: stable
+          Components: main
+          Signed-By: /etc/apt/keyrings/violoop.gpg" | sudo tee /etc/apt/sources.list.d/violoop.sources >/dev/null
+          sudo apt-get update
+
+      - name: Install violoop-qt6
+        run: sudo apt-get install -y violoop-qt6
+
+      - name: Build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/opt/violoop-qt6
+          cmake --build build
+
+      - name: Offscreen smoke test
+        # Loads AppShell.qml and every page it can reach without a
+        # display/GPU - catches the class of bug this repo hit for real
+        # (app/docs/progress.md): a QML error that builds and loads fine
+        # but only crashes on the actual kiosk. Doesn't exercise touch
+        # navigation or real backend data, just "does it come up clean".
+        run: |
+          LD_LIBRARY_PATH=/opt/violoop-qt6/lib \
+          QML2_IMPORT_PATH=/opt/violoop-qt6/qml \
+          QT_QPA_PLATFORM=offscreen \
+            timeout 5 ./build/violoop_edge_kiosk_qt
+          # timeout's exit code 124 means "still running after 5s with no
+          # crash" - the success case for an app that runs until killed.
+          status=$?
+          if [ "$status" -ne 124 ]; then
+            echo "app exited with status $status instead of running - treating as a failure"
+            exit 1
+          fi
