@@ -25,7 +25,10 @@ Item {
         Button {
             anchors.horizontalCenter: parent.horizontalCenter
             text: "开发菜单"
-            onClicked: Nav.push("DevMenuPage.qml")
+            font.pixelSize: 54 // ~3x the Basic style's default button text size
+            implicitWidth: 480
+            implicitHeight: 150
+            onClicked: nav.push("DevMenuPage.qml")
         }
     }
 }

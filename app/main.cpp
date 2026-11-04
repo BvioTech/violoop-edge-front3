@@ -2,6 +2,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 
+#include "core/NavController.h"
 #include "core/RestClient.h"
 #include "core/SseClient.h"
 #include "core/StatusStore.h"
@@ -25,7 +26,9 @@ int main(int argc, char *argv[])
     auto *status = new StatusStore(rest, &engine);
     auto *testVerdicts = new TestVerdictStore(rest, &engine);
     auto *upgrade = new UpgradeStore(rest, sse, &engine);
+    auto *nav = new NavController(QStringLiteral("HomePage.qml"), &engine);
 
+    engine.rootContext()->setContextProperty("nav", nav);
     engine.rootContext()->setContextProperty("restClient", rest);
     engine.rootContext()->setContextProperty("llmRestClient", llmRest);
     engine.rootContext()->setContextProperty("sseClient", sse);

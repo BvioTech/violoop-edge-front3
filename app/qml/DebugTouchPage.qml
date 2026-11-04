@@ -27,7 +27,7 @@ Item {
             spacing: 6
             Row {
                 spacing: 16
-                Button { text: "< 返回"; onClicked: Nav.pop() }
+                Button { text: "< 返回"; onClicked: nav.pop() }
                 Text { text: "触摸诊断"; color: "white"; font.pixelSize: 22; anchors.verticalCenter: parent.verticalCenter }
             }
             Text {

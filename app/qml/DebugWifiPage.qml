@@ -40,7 +40,7 @@ Item {
 
         Row {
             spacing: 16
-            Button { text: "< 返回"; onClicked: Nav.pop() }
+            Button { text: "< 返回"; onClicked: nav.pop() }
             Text { text: "WiFi 配置"; color: "white"; font.pixelSize: 24; anchors.verticalCenter: parent.verticalCenter }
         }
 

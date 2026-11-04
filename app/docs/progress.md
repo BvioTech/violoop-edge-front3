@@ -38,9 +38,14 @@
   宽限、失速检测、自适应轮询间隔全套规则，是这轮业务逻辑最复杂的一块。
   真机还没触发过真实升级或 `upgrade:progress` SSE 事件，只验证过
   `/upgrade/status`/`/upgrade/versions` 的 GET 和字段解析。
-- 页面导航：`Nav.qml`（`pragma Singleton`）包一层 `StackView.push(url)`，
-  所有页面文件是 flat 的 `app/qml/*.qml`（不用子目录，原因见
-  `app/qml/Nav.qml` 注释——避免 QML 跨目录 import/qmldir 的已知坑）。
+- 页面导航：`core/NavController`（纯 C++ `QObject`，`nav` context
+  property）+ `AppShell.qml` 里一个 `Loader { source: nav.currentPage }`。
+  每个页面用 `nav.push("X.qml")`/`nav.pop()`。这是试过三种机制之后定下来
+  的——`pragma Singleton` 的 QML 单例和 `StackView.view` attached
+  property 都在真机真实点击时出过"运行时报错但构建/加载完全正常"的坑，
+  具体过程见下面"真机验证记录"2026-11-04 第二、三条。所有页面文件是
+  flat 的 `app/qml/*.qml`（不用子目录，避免 QML 跨目录 import/qmldir 的
+  已知坑）。
 - `TestPageFrame.qml`/`ActionCard.qml`：共享外壳 + `default property
   alias ... .data`（不是 `.children`——否则放不进 `Connections`/`Timer`
   这类非 Item 的内联 helper，踩过这个坑，已经改对）。
@@ -130,3 +135,71 @@ play-file}`、`/wifi/{scan,connect}`、`violoop-edge-llm` 的 `/health`。
 `Nav.pop()` 的实际触摸跳转还没有真机点击验证过（原理上和 `initialItem`
 同源的坑已经改成字符串了，但没有逐个点击 19+N 个页面入口确认每一个都能
 点得进去）。
+
+### 2026-11-04（同一天，第二次）：`Nav.push` 真机点击时是 "not a function"
+
+用户部署后在设备上真的点了"开发菜单"按钮——**什么反应都没有**。
+`app.log` 里有报错（之前的离屏/截图验证完全没碰到，因为那些验证都是靠
+重写 `initialItem` 绕过了真实的点击路径）：
+
+```
+qrc:/EdgeFrontQt/qml/HomePage.qml:31: TypeError: Property 'push' of object Nav is not a function
+```
+
+`Nav.qml`（`pragma Singleton` 包一层 `QtObject`，内部定义
+`function push(...)`）在构建/加载阶段完全正常——没有报错、没有警告（除了
+一行很容易被忽略的 `qt.qml.diskcache: "pragma Singleton used with a non
+composite singleton type Nav"`，这次事后才理解这行就是在说问题所在）。
+按原来的假设，这类"pragma Singleton 的纯 QML 单例里定义的 `function`"
+在 Qt 这个版本/构建的 qmlcachegen AOT 编译路径下似乎没有被正确识别为可
+调用方法，运行时虽然能访问到 `Nav` 对象本身，但它的自定义函数调用不了。
+没有继续深挖根因（比如换 `qt_policy QTP0001`/`QTP0004`、不让 qmlcachegen
+预编译这一个文件之类的方向都没试），直接换了 Qt 官方自带的标准机制：
+**`StackView` 自带的 `StackView.view` attached property**——任何被
+`StackView` push 进去（含 `initialItem`）的页面，都能直接在自己内部用
+`StackView.view.push(...)`/`StackView.view.pop()`，不需要任何自定义单例。
+删掉了 `Nav.qml`，全仓库替换完（`HomePage`/`DevMenuPage`/
+`TestLandingPage`/`DebugPage`/`DebugTouchPage`/`DebugWifiPage`/
+`VersionPage`/`TestStressPlaceholderPage`/`TestPageFrame` 九个文件）。
+
+**这里的教训记一下**：这类"构建成功、加载不报错，只有真机真实交互路径
+才触发"的 bug，离屏/截图/`initialItem` 快速过页面这种验证方式完全覆盖
+不到——下一步真的需要靠真机手指点击，把 19+N 个页面入口和每个页面的
+"< 返回"按钮都点一遍确认。
+
+### 2026-11-04（同一天，第三次）：`StackView.view` 也是 null，改用纯 C++ 导航
+
+换成 `StackView.view.push(...)`/`StackView.view.pop()`（Qt 官方文档记录
+的标准 attached property 机制）、删掉 `Nav.qml` 之后，用户真机点击**还是
+没反应**。查日志：
+
+```
+qrc:/EdgeFrontQt/qml/HomePage.qml:31: TypeError: Cannot call method 'push' of null
+```
+
+`StackView.view` 这个 attached property 本身读出来是 `null`——不管页面是
+`initialItem` 设置的，还是在 `StackView.Component.onCompleted` 里显式
+`push("HomePage.qml")` 塞进去的（两种都试了，现象一样）。没有再继续深挖
+这个 Qt 构建/版本具体是哪一层没把 attached property 接上。
+
+**不再猜 QML 这边到底哪个机制能用**，直接换成纯 C++ 实现：
+`core/NavController.h/.cpp`，一个普通 `QObject` + `Q_PROPERTY(QString
+currentPage)` + 两个 `Q_INVOKABLE`（`push`/`pop`，内部一个
+`QStringList` 当栈），注册成 `nav` context property——和 `restClient`/
+`statusStore` 这些全程没出过问题的类是同一个模式。`AppShell.qml` 把
+`StackView` 整个换成 `Loader { source: nav.currentPage }`。全部 9 个
+调用 `StackView.view.push/pop` 的文件改回 `nav.push(...)`/`nav.pop()`。
+
+这次在真机上自己先验证了一遍，没有直接丢给用户测第三次：往
+`AppShell.qml` 临时加了个一次性 `Timer`（3 秒后模拟点击，调用
+`nav.push("DevMenuPage.qml")`），真机跑起来看日志确认
+`NavController: push "DevMenuPage.qml" (depth 1 -> 2)` 真的打出来了，
+再截图确认页面真的切到了工厂测试/调试/版本和升级那个菜单——**这次是真的
+验证过跳转本身**，不是只验证了某个页面单独能不能渲染。验证完删掉了这个
+临时 Timer。`AppShell.qml` 的 `Loader` 保留了两行常驻日志
+（`onSourceChanged`/`Loader.Error` 时打印），方便以后排查类似问题不用
+再临时加。
+
+`NavController::push()`/`pop()` 也各打一行 `qInfo()`（页面名 + 深度变化），
+真机 `app.log` 里能直接看到完整的导航轨迹，不用再靠截图互相比对猜发生了
+什么。

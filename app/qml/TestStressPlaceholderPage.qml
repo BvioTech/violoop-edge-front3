@@ -29,7 +29,7 @@ Item {
         Button {
             anchors.horizontalCenter: parent.horizontalCenter
             text: "< 返回"
-            onClicked: Nav.pop()
+            onClicked: nav.pop()
         }
     }
 }

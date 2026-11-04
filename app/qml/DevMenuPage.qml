@@ -17,22 +17,22 @@ Item {
         Button {
             width: 280
             text: "工厂测试"
-            onClicked: Nav.push("TestLandingPage.qml")
+            onClicked: nav.push("TestLandingPage.qml")
         }
         Button {
             width: 280
             text: "调试"
-            onClicked: Nav.push("DebugPage.qml")
+            onClicked: nav.push("DebugPage.qml")
         }
         Button {
             width: 280
             text: "版本和升级"
-            onClicked: Nav.push("VersionPage.qml")
+            onClicked: nav.push("VersionPage.qml")
         }
         Button {
             width: 280
             text: "< 返回主页"
-            onClicked: Nav.pop()
+            onClicked: nav.pop()
         }
     }
 }

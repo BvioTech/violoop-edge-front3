@@ -11,7 +11,8 @@
 // `usbInput` deliberately has no entry here - edge-front2 implements that
 // page but excludes it from the menu/summary (its own comment: "已停用：
 // 不进入汇总"); this app matches that by routing to
-// TestUsbInputPage.qml only via direct Nav.push(), never listed here.
+// TestUsbInputPage.qml only via a direct nav.push() call, never listed
+// here.
 var items = [
     { id: "device", title: "设备信息", page: "TestDeviceInfoPage.qml" },
     { id: "memory", title: "内存信息", page: "TestMemoryInfoPage.qml" },

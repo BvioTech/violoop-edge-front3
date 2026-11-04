@@ -8,6 +8,7 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Network)
 
 qt_add_executable(violoop_edge_kiosk_qt
     main.cpp
+    core/NavController.cpp core/NavController.h
     core/RestClient.cpp core/RestClient.h
     core/SseClient.cpp core/SseClient.h
     core/StatusStore.cpp core/StatusStore.h
@@ -20,7 +21,6 @@ qt_add_qml_module(violoop_edge_kiosk_qt
     VERSION 1.0
     QML_FILES
         qml/AppShell.qml
-        qml/Nav.qml
         qml/StatusHeader.qml
         qml/StatusDot.qml
         qml/TestPageFrame.qml

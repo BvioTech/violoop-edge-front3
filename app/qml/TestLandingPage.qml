@@ -26,7 +26,7 @@ Item {
 
             Row {
                 spacing: 12
-                Button { text: "< 返回"; onClicked: Nav.pop() }
+                Button { text: "< 返回"; onClicked: nav.pop() }
                 Text {
                     text: "工厂测试"
                     color: "white"
@@ -34,7 +34,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                 }
                 Button { text: "重置全部"; onClicked: testVerdictStore.reset() }
-                Button { text: "压力测试（占位）"; onClicked: Nav.push("TestStressPlaceholderPage.qml") }
+                Button { text: "压力测试（占位）"; onClicked: nav.push("TestStressPlaceholderPage.qml") }
             }
 
             Text {
@@ -86,7 +86,7 @@ Item {
 
             MouseArea {
                 anchors.fill: parent
-                onClicked: Nav.push(modelData.page)
+                onClicked: nav.push(modelData.page)
             }
         }
     }

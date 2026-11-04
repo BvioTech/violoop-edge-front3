@@ -4,9 +4,20 @@ import QtQuick.Controls
 // Root window: physical-panel rotation (same convention as both spikes -
 // see ../../qt3d-spike/primitive_test.qml and
 // ../../ui-interface-spike/combined.qml, real-machine-confirmed in the
-// latter's validation item A), a persistent StatusHeader, and a StackView
-// for page navigation (see Nav.qml for how pages push onto it without
-// AppShell needing a Component{} per route).
+// latter's validation item A), a persistent StatusHeader, and a `Loader`
+// driven by `nav.currentPage` (core/NavController.h/.cpp) for page
+// navigation.
+//
+// This is the third navigation mechanism tried - both QML-native ones
+// failed in ways invisible until real-device touch testing (see
+// NavController.h's comment for the full story): a hand-rolled `pragma
+// Singleton` QtObject's own `function push()` threw "not a function" at
+// call time despite loading cleanly, and `StackView`'s documented
+// `StackView.view` attached property read back `null` from inside the
+// pushed item's own handlers, for both `initialItem` and an explicitly
+// `push()`-ed item alike. Plain C++ QObject + Q_PROPERTY, the same
+// pattern RestClient/StatusStore/etc. already use reliably all through
+// this app, sidesteps both failure classes entirely.
 Window {
     id: window
     width: 1080
@@ -14,10 +25,6 @@ Window {
     visible: true
     color: "#121212"
     title: "violoop-edge-kiosk-qt"
-
-    Component.onCompleted: {
-        Nav.view = stackView
-    }
 
     // StatusStore's `sn`/`boardProfile` land asynchronously after the
     // first /status/system poll - keep TestVerdictStore in sync whenever
@@ -65,11 +72,16 @@ Window {
                 }
             }
 
-            StackView {
-                id: stackView
+            Loader {
+                id: pageLoader
                 width: parent.width
                 height: parent.height - 64
-                initialItem: "HomePage.qml"
+                source: nav.currentPage
+                onSourceChanged: console.log("AppShell: loading", source)
+                onStatusChanged: {
+                    if (status === Loader.Error)
+                        console.log("AppShell: FAILED to load", source)
+                }
             }
         }
     }
