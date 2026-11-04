@@ -1,0 +1,14 @@
+# violoop-edge-kiosk-qt runtime config - consumed as a systemd
+# EnvironmentFile (EnvironmentFile=-/etc/violoop/kiosk-qt, leading `-`
+# makes a missing file non-fatal) by violoop-edge-kiosk-qt.service, same
+# convention as edge-front2's /etc/violoop/kiosk. Separate file (not
+# shared with edge-front2's) because two packages owning the same
+# conffile is a dpkg hazard even though the keys mean the same thing.
+
+# Same-machine violoop-edge REST+SSE base - see app/core/RestClient.h.
+EDGE_API_BASE=http://127.0.0.1:9090
+
+# violoop-edge-llm (RK1828 local inference, VLA11 only) - separate
+# service, not proxied by violoop-edge. See app/qml/TestLlmModelPage.qml,
+# the only consumer. Uncomment only if it differs from the default.
+#EDGE_LLM_API_BASE=http://127.0.0.1:8000

@@ -1,0 +1,15 @@
+#!/bin/sh
+# Stops the service before removal/upgrade if it happens to be the one
+# currently enabled (see postinst for why install doesn't auto-enable it).
+# Soft-failed: a service that was never started has nothing to stop.
+set -e
+
+case "$1" in
+  remove|upgrade|deconfigure)
+    if [ -d /run/systemd/system ]; then
+      systemctl stop violoop-edge-kiosk-qt.service || true
+    fi
+    ;;
+esac
+
+exit 0

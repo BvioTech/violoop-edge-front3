@@ -1,0 +1,133 @@
+name: Build and release violoop-edge-kiosk-qt
+
+# Same shape as ../../edge-front2/.github/workflows/build-release.yml:
+# tag push builds + releases, workflow_dispatch builds without releasing.
+# Runs on a native arm64 GitHub-hosted runner (not cross-compiled) because
+# violoop-qt6, the Qt runtime this links against, only ships an arm64
+# build - see app/packaging/debian/control.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+defaults:
+  run:
+    working-directory: app
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install build toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++ pkg-config curl ca-certificates gnupg
+
+      - name: Add the violoop apt repo (for violoop-qt6)
+        # Public repo, no credentials needed to read from it - see
+        # ../../../apt/README.md (BvioTech/apt, the service that serves
+        # this). The signing key is fetched fresh each run rather than
+        # vendored, so a key rotation there doesn't require a change here.
+        run: |
+          curl -fsSL https://deb.violoop.ai/public-key.asc \
+            | gpg --dearmor | sudo tee /etc/apt/keyrings/violoop.gpg >/dev/null
+          echo "Types: deb
+          URIs: https://deb.violoop.ai
+          Suites: stable
+          Components: main
+          Signed-By: /etc/apt/keyrings/violoop.gpg" | sudo tee /etc/apt/sources.list.d/violoop.sources >/dev/null
+          sudo apt-get update
+
+      - name: Install violoop-qt6
+        run: sudo apt-get install -y violoop-qt6
+
+      - name: Offscreen smoke test
+        # Cheap, high-value check learned the hard way during real-device
+        # bring-up this repo's app went through (see app/docs/progress.md -
+        # a QML error that builds/loads fine but crashes at runtime, like
+        # the Window-has-no-font-property incident, would otherwise only
+        # surface on the real kiosk). Doesn't need GPU/display access.
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/opt/violoop-qt6
+          cmake --build build
+          LD_LIBRARY_PATH=/opt/violoop-qt6/lib \
+          QML2_IMPORT_PATH=/opt/violoop-qt6/qml \
+          QT_QPA_PLATFORM=offscreen \
+            timeout 5 ./build/violoop_edge_kiosk_qt || [ $? -eq 124 ]
+          # timeout's own exit code 124 means "still running after 5s with
+          # no crash" - the success case for an application that runs
+          # until killed. Anything else (QML load failure, segfault, ...)
+          # is a real failure and should fail the build.
+
+      - name: Sync version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          sed -i "s/^Version: .*/Version: ${VERSION}/" packaging/debian/control
+          echo "Packaging version: ${VERSION}"
+
+      - name: Build .deb
+        run: bash scripts/build-deb.sh arm64
+
+      - name: Checksums
+        run: |
+          cd output
+          for f in *.deb; do sha256sum "$f" > "$f.sha256"; done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-files-arm64
+          path: |
+            app/output/*.deb
+            app/output/*.sha256
+          retention-days: 1
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-files-*
+          merge-multiple: true
+          path: .
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            *.deb
+            *.sha256
+
+      - name: Notify apt repo
+        env:
+          SECRET: ${{ secrets.APT_WEBHOOK_SECRET }}
+          HOOK_URL: https://deb.violoop.ai/hook/release
+        run: |
+          # Guarded in the shell, not `if:` - secrets aren't available to
+          # a step-level condition. BvioTech/edge-front3 also needs an
+          # entry in apt's repos.yaml (asset pattern
+          # "violoop-edge-kiosk-qt_*_arm64.deb") for this to actually land
+          # in the repo; until then this just no-ops harmlessly (or the
+          # hourly fallback sync picks it up once that's added, per
+          # ../../../apt/README.md).
+          if [ -z "$SECRET" ]; then
+            echo "APT_WEBHOOK_SECRET is unset; skipping (violoop-apt syncs hourly anyway)"
+            exit 0
+          fi
+          BODY=$(jq -cn --arg r "${{ github.repository }}" --arg t "${{ github.ref_name }}" \
+            '{repo:$r, tag:$t}')
+          SIG=sha256=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$SECRET" -hex | awk '{print $2}')
+          curl -fsS --retry 3 --retry-delay 5 --max-time 30 \
+            -X POST "$HOOK_URL" \
+            -H "Content-Type: application/json" \
+            -H "X-Hub-Signature-256: $SIG" \
+            --data "$BODY"

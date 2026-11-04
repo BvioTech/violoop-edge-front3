@@ -336,3 +336,48 @@ parent.verticalCenter` 跟按钮对齐，换成 `Flow` 之后这个 anchors 整�
 `VersionPage`，这次用"连拍"方式（每 1.3 秒截一张、连续 6 张）盖住整个
 跳转窗口，六张截图都确认内容文字变大后依然完整显示、没有被裁切，删掉
 临时 Timer 再正式部署。
+
+## 打包 / CI（2026-11-04）
+
+照抄 `../../edge-front2/scripts/build-deb.sh` + `.github/workflows/
+build-release.yml` 的结构（同样是手工 `dpkg-deb --build`，没有
+`debian/rules`/`dpkg-buildpackage`；同样在 `ubuntu-22.04-arm` 原生 arm64
+runner 上跑，不做交叉编译；同样靠打 `v*` tag 触发、`workflow_dispatch`
+只构建不发布；同样的 HMAC webhook 通知 `deb.violoop.ai/hook/release`）。
+和 Flutter 版本比，这边简单很多——`qt_add_qml_module` 把整棵 QML 树编译
+进了二进制本体（Qt Resource System），打包阶段不用像 Flutter bundle 那样
+拷贝一堆松散文件，staging 树里就一个可执行文件。
+
+关键决定：
+
+- **依赖 `violoop-qt6`**（`BvioTech/violoop-qt-build` 发布、
+  `qt3d-spike` 验证过修复了 GLES/ESSL100 bug 的那个包），不是系统
+  `qt6-*` 包——后者会复现同一个 bug。确认过 `apt/repos.yaml`（独立的
+  `BvioTech/apt` 仓库）已经在追踪这个包，CI 直接 `curl
+  https://deb.violoop.ai/public-key.asc` 拿公钥、加源、`apt-get install
+  violoop-qt6` 即可，不需要额外凭证（这是个公开只读的 apt 源）。
+- **包名/服务名独立**：`violoop-edge-kiosk-qt` / 
+  `violoop-edge-kiosk-qt.service`，**不对** `violoop-edge-front`（生产
+  Flutter 包）设 `Provides`/`Replaces`/`Conflicts`——现在还是评估阶段，
+  不应该让装这个包的人意外顶掉生产 kiosk。
+- **`postinst` 不自动 `enable`/`start` 服务**（这点和 edge-front2 的
+  `postinst` 不一样，是刻意的）：两个 kiosk 服务抢同一个
+  `seat0`/`tty7`，装包就自动抢占生产服务是不可接受的。改用 systemd 层
+  的 `Conflicts=violoop-edge-kiosk.service`（见
+  `violoop-edge-kiosk-qt.service`）表达"这两个不能同时跑"，但启用/切换
+  是操作员手动决定的事（`systemctl disable --now
+  violoop-edge-kiosk.service && systemctl enable --now
+  violoop-edge-kiosk-qt.service`）。
+- CI 里加了一步**离屏冒烟测试**（`QT_QPA_PLATFORM=offscreen` 跑 5 秒，
+  `timeout` 退出码 124 才算过）——这是这几轮真机排查吃过亏换来的经验
+  （`Window` 没有 `font` 属性那次，构建/加载完全不报错，只有真机才炸），
+  CI 里顺手把这类坑先拦一道。
+
+**真机验证**：在 dev1 上跑了 `bash scripts/build-deb.sh arm64`，成功
+产出 `violoop-edge-kiosk-qt_0.0.0_arm64.deb`（~170KB 控制区 + 约 1.1MB
+单一可执行文件），`dpkg-deb -I`/`-c` 确认控制信息和文件布局都对。
+**没有验证的**：真的 `dpkg -i` 安装这个包——这一步被会话的自动模式权限
+分类器拦下了（远程 shell 写操作需要显式授权），没有强行绕过。结构性
+检查（控制信息、文件列表）已经通过，但没有真机验证过 `postinst`
+实际执行、依赖解析是否都满足——如果要继续往前推进这条打包链路，这步
+最好让用户自己跑一次确认，或者明确给这个会话 remote shell 写权限。

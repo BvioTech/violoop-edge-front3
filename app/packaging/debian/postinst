@@ -1,0 +1,24 @@
+#!/bin/sh
+# Mirrors violoop-edge-front2's packaging/debian/postinst (systemd
+# daemon-reload pattern, soft-failed, guarded on /run/systemd/system so a
+# chroot/container install doesn't try to talk to a systemd that isn't
+# running), with one deliberate difference: this package does NOT
+# `systemctl enable`/`restart` its own service here. Both
+# violoop-edge-kiosk-qt.service and the production
+# violoop-edge-kiosk.service (violoop-edge-front2) bind the same
+# seat0/tty7 and cannot run at once - auto-enabling on install would
+# silently fight the production kiosk for the display on next boot. An
+# operator opts in explicitly:
+#   sudo systemctl disable --now violoop-edge-kiosk.service
+#   sudo systemctl enable --now violoop-edge-kiosk-qt.service
+set -e
+
+case "$1" in
+  configure)
+    if [ -d /run/systemd/system ]; then
+      systemctl daemon-reload || true
+    fi
+    ;;
+esac
+
+exit 0

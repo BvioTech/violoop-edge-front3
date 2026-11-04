@@ -12,8 +12,11 @@
   阶段，已完成，spike，非正式实现）。
 - `app/`：新前端的正式实现（第三阶段，进行中）。目前覆盖主页（左上角
   设备状态图标）、工厂测试（19 项 + `/stress` 占位）、调试、版本和升级
-  四块，业务逻辑对齐 edge-front2，不要求视觉 1:1（无设计稿）。见
-  `app/docs/progress.md`。
+  四块，业务逻辑对齐 edge-front2，不要求视觉 1:1（无设计稿）。打包/CI
+  已经照抄 edge-front2 搭起来了（`app/scripts/build-deb.sh` +
+  `.github/workflows/build-release.yml`，真机跑过 `build-deb.sh` 产出
+  可用的 `.deb`，没有做过真机 `dpkg -i` 安装验证）。见
+  `app/README.md`、`app/docs/progress.md`。
 
 - 设备/显示栈背景：`../edge-front2/docs/display-stack-overview.md`
   （硬件、EGL/GLES-only 驱动现状、weston kiosk-shell 链路、应用侧旋转、

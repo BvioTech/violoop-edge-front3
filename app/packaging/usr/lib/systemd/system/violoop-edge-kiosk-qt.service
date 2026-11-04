@@ -1,0 +1,39 @@
+[Unit]
+Description=Violoop Edge Kiosk (Qt/QML, evaluation build)
+After=multi-user.target network.target
+Wants=network-online.target
+Conflicts=violoop-edge-kiosk.service
+# Both this service and violoop-edge-front2's violoop-edge-kiosk.service
+# bind the same seat0/tty7 and cannot run at once - unlike the dpkg-level
+# Conflicts a Provides/Replaces/Conflicts package relationship would give,
+# this is a *runtime* systemd Conflicts: starting one stops the other.
+# Deliberately not dpkg Conflicts/Replaces/Provides against
+# violoop-edge-front - see packaging/debian/control's description for why
+# (this package installs alongside it, not in place of it).
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=violoop
+Group=violoop
+PAMName=login
+EnvironmentFile=-/etc/violoop/kiosk-qt
+RuntimeDirectory=violoop-edge-kiosk-qt
+RuntimeDirectoryMode=0750
+TTYPath=/dev/tty7
+TTYReset=yes
+TTYVHangup=yes
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+UtmpIdentifier=tty7
+UtmpMode=user
+ExecStart=/usr/bin/violoop-edge-kiosk-qt-launch
+Restart=on-failure
+RestartSec=5
+TasksMax=8192
+MemoryAccounting=yes
+
+[Install]
+WantedBy=multi-user.target
