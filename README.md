@@ -4,19 +4,33 @@
 的背景）。
 
 `violoop-edge-front2` 是设备触控屏上现在生产使用的 Flutter Linux kiosk 前端
-（见 sibling `../edge-front2`）。本仓库是评估换框架（Qt）做 3D 动画显示的
-可行性验证，目前只有 `qt3d-spike/` 一个最小 spike，不是新前端的完整实现。
+（见 sibling `../edge-front2`）。本仓库是评估换框架（Qt）的可行性验证，
+目前有两个最小 spike，都不是新前端的完整实现：
+
+- `qt3d-spike/`：3D 动画显示可行性（第一阶段，已完成）。
+- `ui-interface-spike/`：UI 模式覆盖 + REST/SSE 接口对接可行性（第二
+  阶段，已完成）。
 
 - 设备/显示栈背景：`../edge-front2/docs/display-stack-overview.md`
   （硬件、EGL/GLES-only 驱动现状、weston kiosk-shell 链路、应用侧旋转、
   已知坑清单，和给新框架的最小验证清单）。
-- 本次验证的代码、脚本和结论：`qt3d-spike/`（见其 `README.md` 和
+- 第一阶段（3D）的代码、脚本和结论：`qt3d-spike/`（见其 `README.md` 和
   `docs/findings.md`）。真机已测完三轮：非蒙皮 3D 动画可行（硬件加速、
   旋转、帧率、约 5 分钟内存观察都通过），**glTF 骨骼动画（蒙皮）最终
   确认可行**——定位并修复了三个独立问题（从源码编译的 qtbase 被错误
   配置成桌面 OpenGL 而不是 GLES；`qtquicktimeline` 的一个关键帧
   off-by-one bug；测试场景自己的相机裁剪平面参数错误），真机接显示器
-  肉眼确认骨骼动画渲染正确、动画在动。细节见 `docs/findings.md`。
+  肉眼确认骨骼动画渲染正确、动画在动。细节见 `qt3d-spike/docs/findings.md`。
+- 第二阶段（UI/接口）的代码、脚本和结论：`ui-interface-spike/`（见其
+  `README.md` 和 `docs/findings.md`）。真机已测完三轮：手写 SSE 客户端
+  对接同机 `violoop-edge` 服务的握手/心跳正常，REST 轮询无坑；旋转后
+  触摸坐标和手势方向真机实测对齐；CJK/emoji 混排文本用 Qt 默认字体
+  fallback 就正确渲染，不需要像 Flutter/Skia 那样额外配置；20 分钟组合
+  长测（REST+SSE+触摸区域+SSE 驱动动画同时跑）内存热身后打平、无泄漏
+  趋势。**UI 和接口这条路线确认可行，没有发现阻断性问题**，但 SSE
+  驱动的逐帧自绘动画只跑出约 28fps（低于 3D 路径的 59–60fps 基线，原因
+  待查），SSE 断线重连和更长时间的内存观察也还没做。细节见
+  `ui-interface-spike/docs/findings.md`。
 
 ## Qt Quick 3D 授权路线：已决定
 
