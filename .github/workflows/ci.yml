@@ -23,6 +23,17 @@ jobs:
     runs-on: ubuntu-22.04-arm
     steps:
       - uses: actions/checkout@v5
+        with:
+          lfs: true
+          # Without this, app/assets/away/CesiumMan.glb (tracked via
+          # git-lfs, see ../../.gitattributes) checks out as a tiny LFS
+          # pointer stub instead of real glTF bytes - CMake's RESOURCES
+          # step would embed the stub as-is (no error), and the offscreen
+          # smoke test below would only fail with RuntimeLoader's generic
+          # "No suitable reader found" error, same confusing failure mode
+          # qt3d-spike's fetch-assets.sh already hit once for a truncated
+          # download (see that script's comment) - same root cause class,
+          # caught here instead by actually fetching LFS content.
 
       - name: Install build toolchain
         run: |

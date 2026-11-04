@@ -35,6 +35,12 @@ Item {
         Button {
             width: 480
             height: 150
+            text: "待机（3D 动画）"
+            onClicked: nav.push("AwayPage.qml")
+        }
+        Button {
+            width: 480
+            height: 150
             text: "< 返回主页"
             onClicked: nav.pop()
         }

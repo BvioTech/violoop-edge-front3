@@ -66,6 +66,48 @@ play-file}`、`/wifi/{scan,connect}`、`violoop-edge-llm` 的 `/health`。
 `/system/factory-reset`——这些按文档注释里的 wire shape 实现，正确性
 没有像其他端点那样逐字段核实过。
 
+## 待机页（Away，3D 骨骼动画）
+
+对应 edge-front2 的 `lib/pages/away/away_page.dart`，但那边播的是预渲染
+MP4（`AwayVideoService`，libmpv），这边改成 `qml/AwayPage.qml` 用 Qt
+Quick3D 的 `RuntimeLoader` 实时渲染 glTF 骨骼动画——`qt3d-spike` 整个
+spike 存在的理由（见 `../../README.md` 的 GPL-3 许可说明：就是因为
+Quick3D 的角色动画能力）。
+
+- **模型资产**：`assets/away/CesiumMan.glb`，Khronos
+  glTF-Sample-Models 的 CesiumMan（CC0），和 `qt3d-spike` 真机测试
+  （含 6 小时长测）用的是同一个文件——占位，产品还没有正式的吉祥物 3D
+  模型。用户已确认这个阶段先用占位模型把渲染管线/导航接起来，真实模型
+  以后替换 `RuntimeLoader.source` 和这个文件即可。
+- **入库方式用 git-lfs**（`.gitattributes` 追踪 `app/assets/**/*.{glb,
+  gltf,bin}`），不是 `qt3d-spike/scripts/fetch-assets.sh` 那种"不入库、
+  每次 checkout 自己下载"的 spike 做法——这次是要打进正式安装包的资产，
+  必须是仓库里的真实内容，不能依赖构建时下载。相应地，`.github/
+  workflows/ci.yml` 和 `build-release.yml` 的 `actions/checkout` 都加了
+  `lfs: true`（默认不拉 LFS 内容，只会 checkout 出一个指针文件占位符，
+  `qt_add_qml_module` 的 `RESOURCES` 会原样把这个指针文件编译进二进制，
+  不会报错——真正打开会是 `RuntimeLoader` 的"No suitable reader found"
+  这种容易误判成 Qt/Assimp 构建问题的糊涂报错，和 `fetch-assets.sh`
+  当年踩过的截断下载是同一类坑，这次直接在 checkout 层拦住）。
+- **动画循环**：没有另外写 Timer/loop 逻辑——读了 `qtquick3d` 源码
+  （`src/assetutils/qssgqmlutilities.cpp` 的 `writeQmlForAnimation`/
+  `createTimelineAnimation`），`RuntimeLoader` 给 glTF 内置动画生成的
+  `TimelineAnimation` 默认就是 `running: true` + `loops:
+  Animation.Infinite`，加载完模型就会持续循环播放，不需要额外代码。
+- **进入方式**：从 `DevMenuPage.qml` 加一个按钮进，没有做
+  edge-front2 那种基于空闲计时的自动触发/退出（这轮只要求做出
+  "持续播放 3D 骨骼动画的 away 页面"本身，空闲检测是导航架构层面的
+  新决定，没有一起做）。页面右下角一个"< 返回"按钮退出，同
+  `HomePage.qml` 一贯的"用明显按钮不用隐藏手势"的路线（见该文件
+  注释）。
+- **还没有真机验证**：本地环境（开发机，amd64）没有 `violoop-qt6`
+  （arm64-only），只能装系统 `qt6-quick3d-dev` 做离屏编译/加载检查，
+  不能代表真机 GPU 渲染骨骼动画是否正常——不过这个具体组合
+  （`RuntimeLoader` + `violoop-qt6` 渲染 `CesiumMan.glb` 骨骼动画）已经
+  在 `qt3d-spike` 里用同一个文件真机验证过多轮（含 6 小时长测，见
+  `../../qt3d-spike/docs/findings.md`），风险主要在"接入这个 app 的
+  QML 页面结构/资源打包方式是否正确"，不在渲染能力本身。
+
 ## 已知差异 / 待办
 
 - `TestUsbInputPage.qml` 的通过/不通过不会反映到状态点上——它的 testId
@@ -84,6 +126,8 @@ play-file}`、`/wifi/{scan,connect}`、`violoop-edge-llm` 的 `/health`。
   分支。
 - 还没有做过真机 GPU 渲染 + 实际导航点击的端到端验证（只做了离屏加载
   检查，确认没有 QML 报错、`StatusStore` 真的连上了真实后端）。
+- 待机页（`AwayPage.qml`）用的是占位 3D 模型，且没有空闲自动进入/退出
+  （详见上面"待机页"一节）。
 
 ## 真机验证记录
 

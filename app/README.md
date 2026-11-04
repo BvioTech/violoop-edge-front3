@@ -9,6 +9,10 @@ Qt/QML 实现的设备触控屏 kiosk 应用，不要求视觉 1:1（无设计�
 - **调试菜单**：设备状态、授权、音量、推送、升级回放、音频资源、SSH、
   恢复出厂、触摸诊断、WiFi 配置。
 - **版本和升级**：轮询/推送合并、不可达宽限、失速检测、自适应轮询规则。
+- **待机（Away）**：持续播放的 3D 骨骼动画（`qml/AwayPage.qml`，Qt
+  Quick3D `RuntimeLoader` 运行时加载 glTF），对应 edge-front2 的
+  `lib/pages/away/away_page.dart`（那边播的是预渲染 MP4，这边是实时
+  渲染）。目前用占位模型（见下方"结构"），从开发菜单进入。
 
 详细进度见 `docs/progress.md`。
 
@@ -23,6 +27,11 @@ app/
 ├── qml/              # 所有页面，flat 结构（不用子目录，避免 QML 跨目录
 │                       import/qmldir 问题），TestPageFrame.qml 是 19+
 │                       工厂测试子页面共用的外壳
+├── assets/
+│   └── away/          # AwayPage.qml 用的 glTF 模型，git-lfs 追踪（见
+│                        ../.gitattributes）。CesiumMan.glb 是 Khronos
+│                        glTF-Sample-Models 的占位模型（CC0），不是最终
+│                        产品吉祥物——还没有对应的 3D 资产。
 ├── scripts/
 │   ├── launch-under-weston.sh   # 开发用，env var 可覆盖路径
 │   └── build-deb.sh              # 打包，见下

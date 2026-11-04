@@ -20,6 +20,11 @@ jobs:
     runs-on: ubuntu-22.04-arm
     steps:
       - uses: actions/checkout@v5
+        with:
+          lfs: true
+          # See ci.yml's equivalent step: without this, the git-lfs-tracked
+          # assets under app/assets/ check out as pointer stubs, not real
+          # content, and the release .deb would ship a broken glTF asset.
 
       - name: Install build toolchain
         run: |

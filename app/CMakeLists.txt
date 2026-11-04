@@ -4,7 +4,7 @@ project(violoop_edge_kiosk_qt LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Network)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Network Quick3D)
 
 qt_add_executable(violoop_edge_kiosk_qt
     main.cpp
@@ -55,8 +55,17 @@ qt_add_qml_module(violoop_edge_kiosk_qt
         qml/DebugTouchPage.qml
         qml/DebugWifiPage.qml
         qml/VersionPage.qml
+        qml/AwayPage.qml
+    RESOURCES
+        # Placeholder skeletal-animation asset (Khronos glTF-Sample-Models'
+        # CesiumMan, CC0) - stands in for a production mascot model, which
+        # doesn't exist yet. Tracked via git-lfs (see ../.gitattributes),
+        # not fetched by a script like qt3d-spike's own copy: this one
+        # ships inside the installed app, so it has to be a real committed
+        # asset, not a dev-time-only download.
+        assets/away/CesiumMan.glb
 )
 
 target_link_libraries(violoop_edge_kiosk_qt PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Network
+    Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Network Qt6::Quick3D
 )
