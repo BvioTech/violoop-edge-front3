@@ -33,15 +33,14 @@ ApplicationWindow {
     color: "#121212"
     title: "violoop-edge-kiosk-qt"
 
-    // Base font for the whole app. Qt Quick Controls inherit `font` from
-    // their parent item when they don't set their own, so this single
-    // change grows every Button/TextField/etc. across all ~30 pages at
-    // once (their implicit size is contentItem size + padding, so a
-    // bigger font directly means a bigger touch target) - set here
-    // instead of hand-tuning font.pixelSize on every individual control.
-    // Default Basic-style size is much smaller, sized for a desktop
-    // pointer, not a kiosk touchscreen.
-    font.pixelSize: 26
+    // Base font for the whole app, matching the "开发菜单" home button's
+    // size exactly (font.pixelSize: 54) per explicit request - every
+    // Button/TextField/etc. across all ~30 pages that doesn't set its own
+    // font inherits this. Rows that hold more than one button were
+    // switched to Flow (auto-wrapping) wherever they could otherwise
+    // overflow the 1240px logical width at this size - see individual
+    // page comments.
+    font.pixelSize: 54
 
     // StatusStore's `sn`/`boardProfile` land asynchronously after the
     // first /status/system poll - keep TestVerdictStore in sync whenever

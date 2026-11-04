@@ -15,26 +15,26 @@ Item {
         spacing: 16
 
         Button {
-            width: 380
-            height: 90
+            width: 480
+            height: 150
             text: "工厂测试"
             onClicked: nav.push("TestLandingPage.qml")
         }
         Button {
-            width: 380
-            height: 90
+            width: 480
+            height: 150
             text: "调试"
             onClicked: nav.push("DebugPage.qml")
         }
         Button {
-            width: 380
-            height: 90
+            width: 480
+            height: 150
             text: "版本和升级"
             onClicked: nav.push("VersionPage.qml")
         }
         Button {
-            width: 380
-            height: 90
+            width: 480
+            height: 150
             text: "< 返回主页"
             onClicked: nav.pop()
         }

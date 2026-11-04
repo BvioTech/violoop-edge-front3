@@ -240,3 +240,45 @@ qrc:/EdgeFrontQt/qml/AppShell.qml:37:5: Cannot assign to non-existent property "
 依次模拟点开发菜单/工厂测试/调试/版本页）自己把主页、开发菜单、工厂测试
 列表、调试页、版本页全部截图确认了一遍按钮不裁切、不出错，确认完删掉
 临时 Timer 再正式部署。
+
+### 2026-11-04（同一天，第五次）：所有按钮统一改成开发菜单按钮的大小
+
+用户要求把其余页面的按钮都改成和"开发菜单"按钮一样大。把
+`AppShell.qml` 的全局 `font.pixelSize` 从 26 直接提到 54（和开发菜单
+按钮字号完全一致），`DevMenuPage.qml` 四个按钮的宽高也从 380×90 改成
+字面匹配的 480×150。
+
+这个字号跳得比上一轮大很多，之前只调整过几个页头的固定高度就够用，这次
+必须系统性过一遍**所有**包含多个按钮的 `Row`：字号变这么大之后，好几个
+页面原来并排放 3-5 个按钮的 `Row` 在 1240 逻辑宽度里铁定放不下。全部排查
+一遍，把会溢出的 `Row` 换成 `Flow`（自动换行，不用手算每个按钮多宽）：
+`TestLightPage.qml`（5 个按钮）、`TestDisplayPage.qml`（5 色块+1 退出，
+6 个）、`TestAudioPage.qml`（3 个固定 + 动态列表）、`TestLandingPage.qml`
+和 `VersionPage.qml` 的页头（原来是 `Row`，现在是 `Flow`，而且外层
+`Rectangle` 的高度也从写死的数字改成 `headerCol.implicitHeight + 24`
+跟着内容自适应，否则换行后两行内容会被原来写死的高度裁掉）。
+
+过程中又在离屏测试阶段（这次**老老实实先跑了离屏检查，没有重蹈上一次
+`Window.font` 的覆辙**）抓到一个真实问题：
+
+```
+qrc:/EdgeFrontQt/qml/TestLandingPage.qml:33:13: QML Flow: Cannot specify anchors for items inside Flow. Flow will not function.
+```
+
+`Flow` 的子项**不支持 `anchors`**（这是 QML `Flow` 的既定限制，不是
+bug）——原来 `Row` 里有个 `Text` 用 `anchors.verticalCenter:
+parent.verticalCenter` 跟按钮对齐，换成 `Flow` 之后这个 anchors 整个不生效，
+警告说"Flow will not function"（意思是一旦检测到这个用法，这个 `Flow`
+实例会整体退化、不再正常排布）。`TestLandingPage.qml` 和
+`VersionPage.qml` 两处都有同样的写法，都改成去掉 `anchors.verticalCenter`、
+用 `topPadding` 做一个还算过得去的顶对齐替代（不是像素级对齐，但这本来
+就不要求视觉 1:1）。
+
+验证方式：先离屏跑通过（这次真的先做了），再用临时 `Timer` 链在真机上
+挨个跳转到风险最高的几个页面（`TestLandingPage`→`TestLightPage`→
+`TestDisplayPage`→`TestAudioPage`→`DevMenuPage`→`VersionPage`）连续
+截图——因为单次截图容易卡在两次跳转之间的空档，改成每隔 1.3 秒连续截 5
+张的"连拍"方式，这次直接拍到了 `TestDisplayPage`（6 按钮正确换行，
+`TestPageFrame` 的页头/描述/底部通过不通过按钮同时可见不重叠）和
+`TestAudioPage`（含动态生成的播放按钮）两个最高风险页面的真实渲染效果，
+确认都没有裁切、没有报错，才删掉临时 Timer 正式部署。

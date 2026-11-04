@@ -34,8 +34,10 @@ TestPageFrame {
     Component.onCompleted: restClient.get("/audio/factory-test/files")
 
     Column {
+        width: parent.width
         spacing: 12
-        Row {
+        Flow {
+            width: parent.width
             spacing: 12
             Button { text: "刷新列表"; onClicked: restClient.get("/audio/factory-test/files") }
             Button {

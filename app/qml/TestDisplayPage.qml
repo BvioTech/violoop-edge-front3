@@ -8,7 +8,8 @@ TestPageFrame {
     title: "显示测试"
     description: "依次点击色块，检查屏幕显示是否正常（无色偏/亮点/暗点）。"
 
-    Row {
+    Flow {
+        width: parent.width
         spacing: 12
         Repeater {
             model: [

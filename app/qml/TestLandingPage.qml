@@ -16,22 +16,34 @@ Item {
     Rectangle {
         id: header
         width: parent.width
-        height: 150 // bumped for the larger app-wide button font (see AppShell.qml)
+        // Auto-sized from content, not a fixed guess: at the app-wide
+        // 54px button font (see AppShell.qml) three buttons plus a label
+        // wrap onto two lines (Flow below), so a fixed height would clip.
+        height: headerCol.implicitHeight + 24
         color: "#181818"
 
         Column {
-            anchors.fill: parent
+            id: headerCol
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
             anchors.margins: 12
             spacing: 8
 
-            Row {
+            Flow {
+                width: parent.width
                 spacing: 12
                 Button { text: "< 返回"; onClicked: nav.pop() }
                 Text {
                     text: "工厂测试"
                     color: "white"
                     font.pixelSize: 24
-                    anchors.verticalCenter: parent.verticalCenter
+                    // No anchors.verticalCenter here - Flow doesn't
+                    // support anchors on its children at all ("Flow will
+                    // not function" warning, caught offline before this
+                    // reached the kiosk). Minor top-alignment vs the
+                    // buttons is an acceptable look for this non-1:1 page.
+                    topPadding: 12
                 }
                 Button { text: "重置全部"; onClicked: testVerdictStore.reset() }
                 Button { text: "压力测试（占位）"; onClicked: nav.push("TestStressPlaceholderPage.qml") }

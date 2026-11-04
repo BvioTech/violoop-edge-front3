@@ -14,7 +14,8 @@ TestPageFrame {
         restClient.postJson("/light/factory-test/solid", JSON.stringify({r: r, g: g, b: b}))
     }
 
-    Row {
+    Flow {
+        width: parent.width
         spacing: 12
         Button { text: "红"; onClicked: solid(255, 0, 0) }
         Button { text: "绿"; onClicked: solid(0, 255, 0) }
