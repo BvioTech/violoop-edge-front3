@@ -25,7 +25,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            cmake ninja-build g++ pkg-config curl ca-certificates
+            cmake ninja-build g++ pkg-config curl ca-certificates \
+            libegl1-mesa-dev libgles2-mesa-dev libxkbcommon-dev
+          # The EGL/GLES/XKB -dev packages above aren't violoop-qt6's own
+          # Depends (those only list runtime libs - libegl1, libgles2 -
+          # not headers) - they're what Qt6Gui's own CMake config
+          # transitively find_package()s for when something configures
+          # against it. dev1 already has them from earlier, unrelated
+          # work, which is why this gap didn't show up until CI ran on a
+          # clean runner.
 
       - name: Install violoop-qt6
         # Fetched directly from the BvioTech/violoop-qt-build GitHub
