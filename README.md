@@ -4,12 +4,16 @@
 的背景）。
 
 `violoop-edge-front2` 是设备触控屏上现在生产使用的 Flutter Linux kiosk 前端
-（见 sibling `../edge-front2`）。本仓库是评估换框架（Qt）的可行性验证，
-目前有两个最小 spike，都不是新前端的完整实现：
+（见 sibling `../edge-front2`）。本仓库最早是评估换框架（Qt）的可行性
+验证，两轮 spike 都确认可行后，现在是新前端本身的开发仓库：
 
-- `qt3d-spike/`：3D 动画显示可行性（第一阶段，已完成）。
+- `qt3d-spike/`：3D 动画显示可行性（第一阶段，已完成，spike，非正式实现）。
 - `ui-interface-spike/`：UI 模式覆盖 + REST/SSE 接口对接可行性（第二
-  阶段，已完成）。
+  阶段，已完成，spike，非正式实现）。
+- `app/`：新前端的正式实现（第三阶段，进行中）。目前覆盖主页（左上角
+  设备状态图标）、工厂测试（19 项 + `/stress` 占位）、调试、版本和升级
+  四块，业务逻辑对齐 edge-front2，不要求视觉 1:1（无设计稿）。见
+  `app/docs/progress.md`。
 
 - 设备/显示栈背景：`../edge-front2/docs/display-stack-overview.md`
   （硬件、EGL/GLES-only 驱动现状、weston kiosk-shell 链路、应用侧旋转、
