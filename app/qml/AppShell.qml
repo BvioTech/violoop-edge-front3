@@ -18,13 +18,30 @@ import QtQuick.Controls
 // `push()`-ed item alike. Plain C++ QObject + Q_PROPERTY, the same
 // pattern RestClient/StatusStore/etc. already use reliably all through
 // this app, sidesteps both failure classes entirely.
-Window {
+// ApplicationWindow, NOT plain Window: this crashed the whole app in a
+// restart loop on first deploy ("Cannot assign to non-existent property
+// 'font'", caught via an offscreen run - should have run that *before*
+// deploying, not after) - plain QtQuick `Window` has no `font` property
+// to cascade to child Controls, only QtQuick.Controls' `ApplicationWindow`
+// does. ApplicationWindow is otherwise a drop-in superset of Window (same
+// width/height/visible/color/title), so nothing else here changes.
+ApplicationWindow {
     id: window
     width: 1080
     height: 1240
     visible: true
     color: "#121212"
     title: "violoop-edge-kiosk-qt"
+
+    // Base font for the whole app. Qt Quick Controls inherit `font` from
+    // their parent item when they don't set their own, so this single
+    // change grows every Button/TextField/etc. across all ~30 pages at
+    // once (their implicit size is contentItem size + padding, so a
+    // bigger font directly means a bigger touch target) - set here
+    // instead of hand-tuning font.pixelSize on every individual control.
+    // Default Basic-style size is much smaller, sized for a desktop
+    // pointer, not a kiosk touchscreen.
+    font.pixelSize: 26
 
     // StatusStore's `sn`/`boardProfile` land asynchronously after the
     // first /status/system poll - keep TestVerdictStore in sync whenever

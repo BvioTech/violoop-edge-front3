@@ -203,3 +203,40 @@ currentPage)` + 两个 `Q_INVOKABLE`（`push`/`pop`，内部一个
 `NavController::push()`/`pop()` 也各打一行 `qInfo()`（页面名 + 深度变化），
 真机 `app.log` 里能直接看到完整的导航轨迹，不用再靠截图互相比对猜发生了
 什么。
+
+### 2026-11-04（同一天，第四次）：全局放大按钮，`Window.font` 把 kiosk 跑崩了
+
+用户确认导航能点开了，接着要求"其他页面的按钮也都需要改大"。最省事的
+做法是在根节点设一个全局 `font.pixelSize`，让所有没单独设字体的
+Control（Button 等）自动继承变大——**但 `AppShell.qml` 的根节点是
+`Window`，不是 `ApplicationWindow`，`Window` 根本没有 `font` 这个
+属性**。这次改完**没有先离屏跑一下**就直接同步部署重启了真机 kiosk，
+直接把 app 跑崩：
+
+```
+QQmlApplicationEngine failed to load component
+qrc:/EdgeFrontQt/qml/AppShell.qml:37:5: Cannot assign to non-existent property "font"
+```
+
+退出码 255，systemd `Restart=on-failure` 每 5 秒重启一次，几分钟内撞上了
+单元文件的 `StartLimitBurst=10`/`StartLimitIntervalSec=300`，服务进入
+`failed`（"Start request repeated too quickly"），需要
+`systemctl reset-failed` 才能再启动。**这是这几轮里唯一一次真的让 kiosk
+服务进入故障态的失误**，根因就是改完 QML 没有按照一直在用的"先离屏跑一次
+再碰真机"流程来，图快跳过了这一步。
+
+修复：根节点从 `Window` 换成 `QtQuick.Controls` 的 `ApplicationWindow`
+（宽高/可见性/颜色/标题这些属性完全兼容，其他什么都不用改），它专门带
+`font` 属性用来给子控件做字体继承。改完先 `QT_QPA_PLATFORM=offscreen`
+离屏跑通过，再同步真机、`systemctl reset-failed` 清掉故障计数、重启。
+
+顺带把 `TestLandingPage.qml` 的表头高度（116→150）、`DebugTouchPage.qml`
+的表头高度（96→120）、`DevMenuPage.qml` 四个按钮的宽高（280→380 宽，
+新增 90 高）也跟着放大字体一起调了，避免被原来写死的小尺寸容器裁切。
+`DebugPage.qml`/`VersionPage.qml` 用的是 `ActionCard` 自适应高度
+（`implicitHeight: contentCol.implicitHeight + 32`），不需要动。
+
+真机验证方式：没有直接让用户测——先用临时 `Timer` 链（`nav.push()`
+依次模拟点开发菜单/工厂测试/调试/版本页）自己把主页、开发菜单、工厂测试
+列表、调试页、版本页全部截图确认了一遍按钮不裁切、不出错，确认完删掉
+临时 Timer 再正式部署。

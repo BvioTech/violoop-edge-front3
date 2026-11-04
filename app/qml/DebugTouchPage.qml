@@ -19,7 +19,7 @@ Item {
     Rectangle {
         id: header
         width: parent.width
-        height: 96
+        height: 120 // bumped for the larger app-wide button font (see AppShell.qml)
         color: "#181818"
         Column {
             anchors.fill: parent
