@@ -26,6 +26,15 @@ void NavController::pop()
     emit currentPageChanged();
 }
 
+void NavController::replace(const QString &page)
+{
+    qInfo() << "NavController: replace" << m_stack.last() << "->" << page << "(depth stays" << m_stack.size() << ")";
+    if (!m_stack.isEmpty())
+        m_stack.removeLast();
+    m_stack.append(page);
+    emit currentPageChanged();
+}
+
 QString NavController::currentPage() const
 {
     return m_stack.last();

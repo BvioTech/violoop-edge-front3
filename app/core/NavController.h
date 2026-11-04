@@ -30,6 +30,12 @@ public:
 
     Q_INVOKABLE void push(const QString &page);
     Q_INVOKABLE void pop();
+    // Swaps the current top-of-stack page for another one at the same
+    // depth, in a single currentPageChanged() emission - used by
+    // TestPageFrame's "go to next test" so the Loader doesn't transiently
+    // render the page the pop() half-step would otherwise leave visible
+    // (pop() then push() from QML would be two separate emissions).
+    Q_INVOKABLE void replace(const QString &page);
 
     QString currentPage() const;
     int depth() const { return m_stack.size(); }

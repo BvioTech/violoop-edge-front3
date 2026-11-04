@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import "TestDefinitions.js" as TestDefs
 
 // Shared chrome for factory-test sub-pages (see
 // ../pages/test/TestDefinitions.js and ../pages/test/*.qml): title,
@@ -22,6 +23,27 @@ Item {
     default property alias contentChildren: contentArea.data
 
     readonly property string verdict: testVerdictStore.verdicts[testId] ?? "pending"
+
+    // Tapping 通过/不通过 both record the verdict AND jump straight to
+    // the next test in TestDefinitions.js's canonical order (operator
+    // workflow: mark and move on, not mark-then-navigate-back-to-the-
+    // list-then-tap-the-next-one). Falls back to just going back to the
+    // landing page at the end of the list, or for a testId not in the
+    // list at all (TestUsbInputPage - deliberately excluded from the
+    // menu, see TestDefinitions.js) where there's no "next" to speak of.
+    // `nav.replace()`, not pop()+push(): those would be two separate
+    // currentPageChanged() emissions, which would flash the landing page
+    // for one frame in between.
+    function goToNext() {
+        const items = TestDefs.items.filter(function (it) {
+            return !it.llmOnly || testVerdictStore.verdicts["llmModel"] !== undefined
+        })
+        const idx = items.findIndex(function (it) { return it.id === root.testId })
+        if (idx >= 0 && idx + 1 < items.length)
+            nav.replace(items[idx + 1].page)
+        else
+            nav.pop()
+    }
 
     Column {
         anchors.fill: parent
@@ -65,12 +87,18 @@ Item {
             Button {
                 text: "通过"
                 highlighted: root.verdict === "passed"
-                onClicked: testVerdictStore.setVerdict(root.testId, "passed")
+                onClicked: {
+                    testVerdictStore.setVerdict(root.testId, "passed")
+                    root.goToNext()
+                }
             }
             Button {
                 text: "不通过"
                 highlighted: root.verdict === "failed"
-                onClicked: testVerdictStore.setVerdict(root.testId, "failed")
+                onClicked: {
+                    testVerdictStore.setVerdict(root.testId, "failed")
+                    root.goToNext()
+                }
             }
         }
     }

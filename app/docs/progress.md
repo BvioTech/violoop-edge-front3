@@ -282,3 +282,33 @@ parent.verticalCenter` 跟按钮对齐，换成 `Flow` 之后这个 anchors 整�
 `TestPageFrame` 的页头/描述/底部通过不通过按钮同时可见不重叠）和
 `TestAudioPage`（含动态生成的播放按钮）两个最高风险页面的真实渲染效果，
 确认都没有裁切、没有报错，才删掉临时 Timer 正式部署。
+
+### 2026-11-04（同一天，第六次）：点"通过/不通过"自动跳转下一项测试
+
+用户要求：工厂测试子页面点"通过"或"不通过"之后，应该直接跳到
+`TestDefinitions.js` 顺序里的下一项，而不是停在当前页等操作员手动返回
+列表再点下一个。
+
+实现在 `TestPageFrame.qml`（所有 19+ 个子页面共用的外壳）里加一个
+`goToNext()`：按 `TestDefinitions.js` 过滤后的顺序（同
+`TestLandingPage.qml` 的过滤逻辑，含 VLA11 的 `llmModel` 条件显示）找到
+当前 `testId` 的下一项，有就跳过去，没有（到最后一项，或者
+`testId` 根本不在列表里——比如被故意排除在菜单外的
+`TestUsbInputPage.qml`）就退回工厂测试列表页。"通过"和"不通过"两个按钮
+都接上：先记录判定结果，再调用 `root.goToNext()`。
+
+`NavController` 加了第三个操作 `replace()`：原来想用 `pop()` 接
+`push()` 两步实现"换到下一页但深度不变"，但这两步是两次独立的
+`currentPageChanged()` 信号，`AppShell.qml` 的 `Loader` 会先短暂渲染
+一次 pop 之后露出来的工厂测试列表页，再渲染下一个测试页，真机上会看到
+一闪而过的列表页。`replace()` 把"移除栈顶、压入新页"合并成一次信号发出，
+从 `app.log` 里能看到类似
+`NavController: replace "TestDeviceInfoPage.qml" -> "TestMemoryInfoPage.qml" (depth stays 2)`
+这样的单条记录，没有闪烁。
+
+验证方式：真机上用临时 `Timer` 模拟了"进入设备信息页 → 点通过"的完整
+操作（直接调用 `testVerdictStore.setVerdict("device", "passed")` +
+`pageLoader.item.goToNext()`，`pageLoader.item` 就是当前 `Loader` 加载出
+来的那个 `TestPageFrame` 实例），确认 `app.log` 里真的打出了
+`device -> memory` 的 `replace` 记录，并且截图确认页面真的切到了
+"内存信息"（DDR/存储容量都是真实数据），删掉临时代码再正式部署。
