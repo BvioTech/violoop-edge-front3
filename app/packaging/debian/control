@@ -5,15 +5,18 @@ Priority: optional
 Architecture: ARCH_PLACEHOLDER
 Maintainer: doctor <doctor@bvio.ai>
 Depends: violoop-qt6 (>= 6.8.5-violoop3), weston, fonts-noto-cjk, fonts-noto-core, fonts-dejavu-core, fonts-noto-color-emoji, libstdc++6
+Replaces: violoop-edge-front
 Description: Violoop Edge device kiosk UI (Qt/QML, evaluation build)
  Qt/QML reimplementation of the device kiosk front-end, evaluating
  replacing the production Flutter app (violoop-edge-front /
- violoop-edge-kiosk.service, see sibling violoop-edge-front2). Installs
- alongside it, not in place of it - no Provides/Replaces/Conflicts
- against that package. This package's own violoop-edge-kiosk-qt.service
- is NOT enabled automatically on install (see postinst): both kiosk
- apps bind the same seat0/tty7 and cannot run at once, so an operator
- must explicitly choose which one is active.
+ violoop-edge-kiosk.service, see sibling violoop-edge-front2). Declares
+ Replaces against violoop-edge-front in preparation for that cutover -
+ we're still pre-production, so this is groundwork, not an active
+ takeover (no Conflicts/Breaks against that package yet, so both can
+ still be installed side by side). This package's own
+ violoop-edge-kiosk-qt.service IS enabled and started automatically on
+ install (see postinst): it conflicts at the systemd level with the
+ production violoop-edge-kiosk.service, so starting it stops that one.
  .
  Links against /opt/violoop-qt6 (package violoop-qt6), BvioTech's own
  Qt 6.8.5 build with the GLES/ESSL100 and qtquicktimeline fixes this
