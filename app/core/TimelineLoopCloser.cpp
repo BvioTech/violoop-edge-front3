@@ -4,6 +4,7 @@
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQmlListReference>
+#include <QSet>
 #include <QUrl>
 #include <QVariant>
 
@@ -71,4 +72,34 @@ int TimelineLoopCloser::closeLoops(QObject *sceneRoot)
 
     qInfo() << "TimelineLoopCloser: closed the loop on" << patched << "keyframe group(s)";
     return patched;
+}
+
+int TimelineLoopCloser::setPaused(QObject *sceneRoot, bool paused)
+{
+    if (!sceneRoot)
+        return 0;
+
+    // The generated QQuickTimelineAnimation is expected to be a QObject
+    // child of its Timeline, but also walk each Timeline's `animations`
+    // list in case it isn't parented that way.
+    QSet<QObject *> animations;
+    const auto objects = sceneRoot->findChildren<QObject *>();
+    for (QObject *object : objects) {
+        if (object->inherits("QQuickTimelineAnimation")) {
+            animations.insert(object);
+        } else if (object->inherits("QQuickTimeline")) {
+            QQmlListReference list(object, "animations");
+            for (qsizetype i = 0; list.isValid() && i < list.count(); ++i) {
+                if (QObject *animation = list.at(i))
+                    animations.insert(animation);
+            }
+        }
+    }
+
+    for (QObject *animation : std::as_const(animations))
+        animation->setProperty("paused", paused);
+
+    if (animations.isEmpty())
+        qWarning() << "TimelineLoopCloser: no timeline animation found to" << (paused ? "pause" : "resume");
+    return animations.size();
 }

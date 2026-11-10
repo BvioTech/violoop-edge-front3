@@ -12,7 +12,8 @@ Qt/QML 实现的设备触控屏 kiosk 应用，不要求视觉 1:1（无设计�
 - **待机（Away）**：持续播放的 3D 骨骼动画（`qml/AwayPage.qml`，Qt
   Quick3D `RuntimeLoader` 运行时加载 glTF），对应 edge-front2 的
   `lib/pages/away/away_page.dart`（那边播的是预渲染 MP4，这边是实时
-  渲染）。目前用占位模型（见下方"结构"），从开发菜单进入。
+  渲染）。单指滑动旋转视角、双指缩放、可暂停，用来证明是实时 3D 而
+  不是视频。目前用占位模型（见下方"结构"），从开发菜单进入。
 
 详细进度见 `docs/progress.md`。
 

@@ -38,4 +38,10 @@ public:
     // there's no animation, or every group already starts at frame 0 -
     // calling it twice is harmless).
     Q_INVOKABLE int closeLoops(QObject *sceneRoot);
+
+    // Pauses/resumes the TimelineAnimation(s) RuntimeLoader generated
+    // under `sceneRoot` (same unreachable-from-QML objects as above, which
+    // is why this lives here despite the class name). Returns how many
+    // animations were found.
+    Q_INVOKABLE int setPaused(QObject *sceneRoot, bool paused);
 };
