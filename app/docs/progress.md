@@ -89,11 +89,25 @@ Quick3D 的角色动画能力）。
   不会报错——真正打开会是 `RuntimeLoader` 的"No suitable reader found"
   这种容易误判成 Qt/Assimp 构建问题的糊涂报错，和 `fetch-assets.sh`
   当年踩过的截断下载是同一类坑，这次直接在 checkout 层拦住）。
-- **动画循环**：没有另外写 Timer/loop 逻辑——读了 `qtquick3d` 源码
-  （`src/assetutils/qssgqmlutilities.cpp` 的 `writeQmlForAnimation`/
-  `createTimelineAnimation`），`RuntimeLoader` 给 glTF 内置动画生成的
+- **动画循环**：`RuntimeLoader` 给 glTF 内置动画生成的
   `TimelineAnimation` 默认就是 `running: true` + `loops:
-  Animation.Infinite`，加载完模型就会持续循环播放，不需要额外代码。
+  Animation.Infinite`（`qtquick3d` 的 `createTimelineAnimation`），不需要
+  Timer。但它**不是一个闭合的循环**：`CesiumMan.glb` 的 48 个关键帧在
+  1/24s..2s（第一个关键帧不在 t=0），而时间轴跑 0..2000ms；
+  `QQuickKeyframeGroup::evaluate()` 对"第一个关键帧之前"的帧是从属性的
+  **动画前原始值**（骨骼静止/绑定姿态）插值过去的，所以每圈回绕时所有
+  骨骼会瞬间弹回静止姿态、再用约 42ms 混回行走动作——每 2s 抽动一次，
+  和其他 glTF 查看器里看到的完整循环不一样。修复：
+  `core/TimelineLoopCloser`（context property `timelineLoopCloser`）在
+  模型加载成功后找到生成的 Timeline，给每个关键帧组在起始帧补一个取
+  "最后一个关键帧的值"的关键帧，回绕处位置连续、周期仍是 2000ms。
+  在开发机（amd64）用桌面版 Qt 6.8.3 离屏验证过：整个 app 编译通过；
+  补之前第 1ms 的骨骼旋转是静止姿态，补之后与第 2000ms 连续，33 个
+  关键帧组全部补上，重复调用返回 0。**真机也确认过**（2026-11-10，dev1，
+  `violoop-qt6` 6.8.5-violoop3）：设备上构建安装后，用户肉眼确认待机页
+  已能正确循环。另外确认过导入器丢弃"与前一
+  帧相同的关键帧"这个行为对这个模型的影响可以忽略（四元数分量偏差
+  < 0.005）。
 - **进入方式**：从 `DevMenuPage.qml` 加一个按钮进，没有做
   edge-front2 那种基于空闲计时的自动触发/退出（这轮只要求做出
   "持续播放 3D 骨骼动画的 away 页面"本身，空闲检测是导航架构层面的
