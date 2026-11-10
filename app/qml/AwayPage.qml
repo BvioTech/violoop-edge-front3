@@ -16,8 +16,12 @@ import QtQuick3D.AssetUtils
 // RuntimeLoader auto-plays whatever animation is baked into the glTF: its
 // generated QtQuickTimeline TimelineAnimation defaults to `running: true`
 // and `loops: Animation.Infinite` (confirmed by reading
-// qtquick3d/src/assetutils/qssgqmlutilities.cpp), so "persistently play"
-// needs no extra Timer/loop wiring here - loading the asset is enough.
+// qtquick3d/src/assetutils/qssgqmlutilities.cpp), so no Timer/loop wiring
+// is needed to keep it playing. What it does NOT do is close the loop:
+// glTF keyframes rarely start at t=0, and the timeline fills that gap by
+// blending in from the rest pose on every wrap-around (a twitch once per
+// cycle). timelineLoopCloser (core/TimelineLoopCloser.h) patches the
+// generated timeline once the model has loaded - see that header.
 //
 // Asset: assets/away/CesiumMan.glb, Khronos glTF-Sample-Models' CesiumMan
 // (CC0), the same model qt3d-spike's real-hardware testing (including the
@@ -57,7 +61,9 @@ Item {
             id: loader
             source: Qt.resolvedUrl("../assets/away/CesiumMan.glb")
             onStatusChanged: {
-                if (status === RuntimeLoader.Error)
+                if (status === RuntimeLoader.Success)
+                    timelineLoopCloser.closeLoops(loader)
+                else if (status === RuntimeLoader.Error)
                     console.log("AwayPage: RuntimeLoader failed to load", source, "-", errorString)
             }
         }
