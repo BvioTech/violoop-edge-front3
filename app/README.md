@@ -74,6 +74,75 @@ QT_QPA_PLATFORM=offscreen timeout 5 ./build/violoop_edge_kiosk_qt
 - 周期性失败只在状态翻转时打一条，参考 `StatusStore::onFailed`。
 - 上板验证：`journalctl -p warning -u violoop-edge-kiosk-qt`。
 
+## 性能标杆
+
+待机页（`qml/AwayPage.qml`）在真机上的基准数据，以后改模型、灯光或 Qt 版本时
+拿来对比。测于 2026-11-13，提交 `2031e80`。
+
+**测试条件**
+
+- 设备：dev1，Violoop RK3576 VLA11（8 核，8 GB 内存，Mali GPU），
+  面板 1080×1240@60Hz，Qt `6.8.5-violoop3`，weston kiosk-shell。
+- 模型：`assets/away/VIO_DesktopPet.glb`（38.2 万面，19 段动画）。
+- 渲染设置：MSAA High、六盏灯、一张 light probe
+  （`assets/away/studio-probe.hdr`，曝光 0.6）、默认视角。
+- 采样：`core/PerfRecorder` 每秒一行，共 6 小时（21565 个采样，去掉开头
+  30 秒的加载阶段）。
+
+**6 小时烤机结果**
+
+| 指标 | 平均 | 范围 | 趋势 |
+| --- | --- | --- | --- |
+| 帧率 | 29.6 fps | 24.5–30.4 | 无衰减，每小时均值 29.59–29.61 |
+| CPU 负载（全部核） | 12.9% | 7.0–23.9% | 无趋势 |
+| GPU 负载 | 55% | 多数 47–66% | 无趋势 |
+| SoC 温度 | 45.5°C | 44.4–49.9°C | 无爬升，每小时均值 45.4–45.6°C |
+| 进程内存（RSS） | 约 327 MB | 325–342 MB | 前 5 小时中位数持平在 326–327 MB |
+
+- 全程无崩溃、无服务重启，内核日志里没有 OOM、温控降频或 GPU 报错。
+- 低于 28 fps 的有 38 秒，低于 25 fps 的有 3 秒，没有低于 20 fps 的。
+- 前 5 小时 13 分钟播放 `idle.default`；之后有人在屏幕上切到
+  `waiting_user`（约 14 分钟）和 `done`（到结束），帧率不变，内存中位数
+  高了约 5 MB 后不再上涨。只有这一次切换的数据，反复切换是否累积没有测。
+
+**帧率为什么是 30**
+
+没有限帧。面板是 60Hz 垂直同步，一帧超过 16.7 ms 就要等下一次刷新，帧率
+落到 60 的一半。瓶颈在 CPU 而不在 GPU：30 fps 下主线程占用约 51%
+（折合每帧约 17 ms），渲染线程约 31%（约 10 ms）。主线程的时间具体花在
+哪里（时间线求值、节点显隐回调等）还没有剖析。
+
+抗锯齿和 light probe 都不影响帧率，只影响 GPU 负载（同一设备，
+`idle.default`，每项约 11 秒）：
+
+| 设置 | 帧率 | GPU 负载 |
+| --- | --- | --- |
+| MSAA High + probe（现用） | 29.6 | 54% |
+| MSAA Medium + probe | 29.7 | 53% |
+| 无抗锯齿 + probe | 29.6 | 35–38% |
+| MSAA High，无 probe | 29.7 | 45% |
+| 无抗锯齿，无 probe | 29.6 | 35% |
+| SSAA 1.2x + probe | 29.6 | 45% |
+| SSAA 1.5x + probe | 29.7 | 55% |
+| SSAA 2x + probe | 29.6 | 74% |
+
+**复现**
+
+待机页打开期间自动记录到
+`/var/lib/violoop-edge-kiosk-qt/away-perf-<日期>-<时间>.csv`（列的含义见
+`core/PerfRecorder.h`），页面右上角同时显示实时读数。无人值守烤机时让
+kiosk 启动后直接进待机页：
+
+```bash
+sudo mkdir -p /etc/systemd/system/violoop-edge-kiosk-qt.service.d
+printf '[Service]\nEnvironment=EDGE_KIOSK_OPEN_PAGE=AwayPage.qml\n' \
+  | sudo tee /etc/systemd/system/violoop-edge-kiosk-qt.service.d/burn-in.conf
+sudo systemctl daemon-reload && sudo systemctl restart violoop-edge-kiosk-qt
+# 结束后删掉 burn-in.conf，再 daemon-reload 并重启服务
+```
+
+服务中途重启会另起一个新 CSV，所以文件数大于 1 就说明烤机期间重启过。
+
 ## 打包
 
 ```bash
