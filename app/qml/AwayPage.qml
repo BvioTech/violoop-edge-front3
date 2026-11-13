@@ -84,13 +84,37 @@ Item {
     property url modelSource: Qt.resolvedUrl("../assets/away/VIO_DesktopPet.glb")
     property bool cullCollapsed: true
 
+    // "loading" until the model is on screen, then "ready"; "error" if the
+    // file could not be loaded.
+    //
+    // RuntimeLoader parses the file on the GUI thread, inside the
+    // assignment to its `source` (about 1.5s for this model on dev1, plus
+    // 0.2s here patching its timelines and another 0.2s for the first
+    // frame to upload the meshes). Nothing can be drawn during that, so
+    // the page first lets one frame with the loading indicator reach the
+    // screen (loadStarted, below) and only then hands the loader its
+    // source. Without that the tap that opens this page appears to do
+    // nothing for two seconds.
+    property string loadState: "loading"
+    property bool loadStarted: false
+    onModelSourceChanged: loadState = "loading"
+
     // Frames left in which to try measuring the freshly loaded model.
     property int framesToMeasure: 0
     Connections {
         target: root.Window.window
-        enabled: root.framesToMeasure > 0
+        enabled: !root.loadStarted || root.framesToMeasure > 0
         function onFrameSwapped() {
+            if (!root.loadStarted) {
+                root.loadStarted = true
+                return
+            }
             root.framesToMeasure = root.measureModel() ? 0 : root.framesToMeasure - 1
+            // The model's meshes have been through a frame once they can
+            // be measured. Don't keep the indicator up forever for a model
+            // that has nothing to measure.
+            if (root.framesToMeasure === 0 && root.loadState === "loading")
+                root.loadState = "ready"
         }
     }
 
@@ -271,7 +295,7 @@ Item {
 
         RuntimeLoader {
             id: loader
-            source: root.modelSource
+            source: root.loadStarted ? root.modelSource : ""
             onStatusChanged: {
                 root.modelMin = Qt.vector3d(0, 0, 0)
                 root.modelMax = Qt.vector3d(0, 0, 0)
@@ -291,9 +315,11 @@ Item {
                     }
                     if (root.cullCollapsed)
                         root.hideCollapsedNodes()
-                    root.framesToMeasure = 30
-                } else if (status === RuntimeLoader.Error)
+                    root.framesToMeasure = 600
+                } else if (status === RuntimeLoader.Error) {
+                    root.loadState = "error"
                     console.log("AwayPage: RuntimeLoader failed to load", source, "-", errorString)
+                }
             }
         }
 
@@ -365,10 +391,58 @@ Item {
         text: "滑动旋转 · 双指缩放"
     }
 
+    // Loading / failure notice, see loadState. The spinner stands still
+    // for the ~1.5s the GUI thread is stuck inside the load and only turns
+    // before and after. A RotationAnimator (render thread) does keep
+    // turning through it, but on dev1 it made the model appear a full
+    // second later (3.0s instead of 1.9s from page creation), so no.
+    Column {
+        visible: root.loadState !== "ready"
+        anchors.centerIn: parent
+        spacing: 24
+
+        Item {
+            visible: root.loadState === "loading"
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: 72
+            height: 72
+
+            Rectangle {
+                anchors.fill: parent
+                radius: width / 2
+                color: "transparent"
+                border.color: "#424242"
+                border.width: 6
+            }
+            Rectangle {
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: -3
+                width: 12
+                height: 12
+                radius: 6
+                color: "#80deea"
+            }
+            RotationAnimation on rotation {
+                from: 0
+                to: 360
+                duration: 1000
+                loops: Animation.Infinite
+                running: root.loadState === "loading"
+            }
+        }
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            color: "#9e9e9e"
+            font.pixelSize: 32
+            text: root.loadState === "error" ? "模型加载失败" : "模型加载中…"
+        }
+    }
+
     // Freezes the generated TimelineAnimation (unreachable from QML, hence
     // the C++ helper - see core/TimelineLoopCloser.h). Orbiting still
     // works while paused.
     Button {
+        visible: root.loadState === "ready"
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.margins: 16
@@ -382,7 +456,7 @@ Item {
     // Steps through the model's clips, so every one of them can be checked
     // on the device. Stand-in for the real thing (events picking clips).
     Row {
-        visible: root.clipNames.length > 1
+        visible: root.loadState === "ready" && root.clipNames.length > 1
         anchors.bottom: parent.bottom
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.margins: 16
