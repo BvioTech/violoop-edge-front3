@@ -96,7 +96,7 @@ ApplicationWindow {
                 onSourceChanged: console.log("AppShell: loading", source)
                 onStatusChanged: {
                     if (status === Loader.Error)
-                        console.log("AppShell: FAILED to load", source)
+                        console.error("AppShell: FAILED to load", source)
                 }
             }
         }

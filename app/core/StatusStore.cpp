@@ -60,8 +60,11 @@ bool StatusStore::ready() const
 
 void StatusStore::onSucceeded(const QString &path, int statusCode, const QString &body)
 {
-    if (statusCode < 200 || statusCode >= 300)
+    if (statusCode < 200 || statusCode >= 300) {
+        onFailed(path, QStringLiteral("HTTP %1").arg(statusCode));
         return;
+    }
+    noteRecovered(path);
 
     const QJsonObject obj = QJsonDocument::fromJson(body.toUtf8()).object();
     const bool wasReady = ready();
@@ -111,7 +114,20 @@ void StatusStore::onFailed(const QString &path, const QString &errorString)
 {
     // Leave the last-known value in place (matches edge-front2: a
     // transient poll failure shows the last good state, not an immediate
-    // "unknown" flicker) - just log it for now via qWarning through Qt's
-    // default message handler (no dedicated logger in this app yet).
+    // "unknown" flicker).
+    //
+    // Warn only when a path goes from working to failing. Warnings are
+    // shipped to the cloud, and this runs every 5 seconds per path, so
+    // warning on every failure would flood it for as long as violoop-edge
+    // is down.
+    if (m_failingPaths.contains(path))
+        return;
+    m_failingPaths.insert(path);
     qWarning("StatusStore: %s failed: %s", qPrintable(path), qPrintable(errorString));
+}
+
+void StatusStore::noteRecovered(const QString &path)
+{
+    if (m_failingPaths.remove(path))
+        qInfo("StatusStore: %s recovered", qPrintable(path));
 }

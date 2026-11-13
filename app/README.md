@@ -60,6 +60,20 @@ QT_QPA_PLATFORM=offscreen timeout 5 ./build/violoop_edge_kiosk_qt
 链接 `/opt/violoop-qt6`（`violoop-qt6` 包），不是系统 `qt6-*` 包——后者
 在这台设备上有 GLES/ESSL100 版本协商问题。
 
+## 日志
+
+规范见 os 仓库的 `docs/app-logging-self-audit.md`。本服务属于应用单元，
+只有 warning 及以上会上云。
+
+- `core/JournalLog.cpp` 装了一个 Qt 消息处理器，给每行加 `<N>` 级别前缀，
+  journald 才能记对 priority。`qDebug`/`qInfo`/`qWarning`/`qCritical` 和 QML
+  的 `console.log`/`info`/`warn`/`error` 依次对应 debug/info/warning/error。
+  stderr 是终端时不加前缀。
+- 失败用 `qWarning`/`console.error`，不要用 `console.log`（那是 debug）。
+- 任何级别都只记元数据（页面名、id、计数、状态码），不记用户内容和凭据。
+- 周期性失败只在状态翻转时打一条，参考 `StatusStore::onFailed`。
+- 上板验证：`journalctl -p warning -u violoop-edge-kiosk-qt`。
+
 ## 打包
 
 ```bash
