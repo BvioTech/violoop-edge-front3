@@ -13,7 +13,8 @@ Qt/QML 实现的设备触控屏 kiosk 应用，不要求视觉 1:1（无设计�
   Quick3D `RuntimeLoader` 运行时加载 glTF），对应 edge-front2 的
   `lib/pages/away/away_page.dart`（那边播的是预渲染 MP4，这边是实时
   渲染）。单指滑动旋转视角、双指缩放、可暂停，用来证明是实时 3D 而
-  不是视频。目前用占位模型（见下方"结构"），从开发菜单进入。
+  不是视频。模型见下方"结构"，页面底部可手动切换模型里的各段动画，
+  从开发菜单进入。
 
 详细进度见 `docs/progress.md`。
 
@@ -30,9 +31,10 @@ app/
 │                       工厂测试子页面共用的外壳
 ├── assets/
 │   └── away/          # AwayPage.qml 用的 glTF 模型，git-lfs 追踪（见
-│                        ../.gitattributes）。CesiumMan.glb 是 Khronos
-│                        glTF-Sample-Models 的占位模型（CC0），不是最终
-│                        产品吉祥物——还没有对应的 3D 资产。
+│                        ../.gitattributes）。VIO_DesktopPet.glb 是设计师
+│                        给的吉祥物模型（19 段动画）；CesiumMan.glb 是之前
+│                        的占位模型（Khronos glTF-Sample-Models，CC0），
+│                        留作轻量基准。
 ├── scripts/
 │   ├── launch-under-weston.sh   # 开发用，env var 可覆盖路径
 │   └── build-deb.sh              # 打包，见下

@@ -23,12 +23,15 @@ import QtQuick3D.AssetUtils
 // cycle). timelineLoopCloser (core/TimelineLoopCloser.h) patches the
 // generated timeline once the model has loaded - see that header.
 //
-// Asset: assets/away/CesiumMan.glb, Khronos glTF-Sample-Models' CesiumMan
-// (CC0), the same model qt3d-spike's real-hardware testing (including the
-// 6-hour soak run) used - a placeholder until a production mascot model
-// exists. Swap the RuntimeLoader's `source` for a new asset (also added to
-// CMakeLists.txt's RESOURCES and tracked via git-lfs, see
-// ../../.gitattributes) when one does.
+// Asset: assets/away/VIO_DesktopPet.glb, the designer's mascot model
+// (tracked via git-lfs, see ../../.gitattributes, and listed in
+// CMakeLists.txt's RESOURCES). Unlike the CesiumMan placeholder it
+// replaced (one walk cycle), it carries 19 clips named by event
+// ("idle.default", "welcome", "touch.left", ...). RuntimeLoader only ever
+// shows the first one by itself; this page can step through all of them
+// (timelineLoopCloser.playClip) so each can be looked at on the device.
+// Which event plays which clip is not wired up - see
+// ../docs/user-model-spec.md.
 Item {
     id: root
 
@@ -40,14 +43,177 @@ Item {
     // reproduce the original fixed camera exactly (position (0, 1.2, 3.5),
     // pitched -10 degrees): that line of sight crosses the character's
     // axis (x = z = 0) at y = 1.2 - 3.5 * tan(10deg) ~= 0.58, which is the
-    // orbit pivot, 3.5 / cos(10deg) ~= 3.55 away.
+    // orbit pivot, 3.5 / cos(10deg) ~= 3.55 away. Those two numbers were
+    // tuned for CesiumMan and are now only what the camera uses until the
+    // model has loaded; from then on they follow the model's own bounds
+    // (modelMin/modelMax, set on load).
     readonly property real defaultYaw: 0
     readonly property real defaultPitch: -10
-    readonly property real defaultDistance: 3.55
+    property vector3d modelMin: Qt.vector3d(0, 0, 0)
+    property vector3d modelMax: Qt.vector3d(0, 0, 0)
+    readonly property vector3d modelSize: modelMax.minus(modelMin)
+    readonly property bool modelMeasured: modelSize.x > 0 && modelSize.y > 0
+
+    // Orbit around the bounds' centre.
+    readonly property vector3d pivot: modelMeasured ? modelMin.plus(modelMax).times(0.5) : Qt.vector3d(0, 0.58, 0)
+
+    // Far enough back that the bounding box takes up about 1/fill of the
+    // view in its tighter direction. The slack is for what the bounds
+    // don't cover - they are the rest pose's, and clips move the character
+    // and bring out props beside and above it. A binding rather than a
+    // one-off calculation because the model can finish loading before the
+    // page has been given its size.
+    readonly property real defaultDistance: {
+        if (!modelMeasured || view.width <= 0 || view.height <= 0)
+            return 3.55
+        const fill = 1.7
+        const tanHalfFov = Math.tan(camera.fieldOfView * Math.PI / 360) // vertical fov
+        const footprint = Math.max(modelSize.x, modelSize.z)
+        const forHeight = modelSize.y / 2 / tanHalfFov
+        const forWidth = footprint / 2 / (tanHalfFov * view.width / view.height)
+        return Math.max(forHeight, forWidth) * fill + footprint / 2
+    }
     property real yaw: defaultYaw
     property real pitch: defaultPitch
     property real distance: defaultDistance
     property bool paused: false
+
+    // The model to show. A property so that a different file can be put
+    // in without editing the loader (the user-supplied-model feature in
+    // ../docs/user-model-spec.md will need that).
+    property url modelSource: Qt.resolvedUrl("../assets/away/VIO_DesktopPet.glb")
+    property bool cullCollapsed: true
+
+    // "loading" until the model is on screen, then "ready"; "error" if the
+    // file could not be loaded.
+    //
+    // RuntimeLoader parses the file on the GUI thread, inside the
+    // assignment to its `source` (about 1.5s for this model on dev1, plus
+    // 0.2s here patching its timelines and another 0.2s for the first
+    // frame to upload the meshes). Nothing can be drawn during that, so
+    // the page first lets one frame with the loading indicator reach the
+    // screen (loadStarted, below) and only then hands the loader its
+    // source. Without that the tap that opens this page appears to do
+    // nothing for two seconds.
+    property string loadState: "loading"
+    property bool loadStarted: false
+    onModelSourceChanged: loadState = "loading"
+
+    // Frames left in which to try measuring the freshly loaded model.
+    property int framesToMeasure: 0
+    Connections {
+        target: root.Window.window
+        enabled: !root.loadStarted || root.framesToMeasure > 0
+        function onFrameSwapped() {
+            if (!root.loadStarted) {
+                root.loadStarted = true
+                return
+            }
+            root.framesToMeasure = root.measureModel() ? 0 : root.framesToMeasure - 1
+            // The model's meshes have been through a frame once they can
+            // be measured. Don't keep the indicator up forever for a model
+            // that has nothing to measure.
+            if (root.framesToMeasure === 0 && root.loadState === "loading")
+                root.loadState = "ready"
+        }
+    }
+
+    // Sets modelMin/modelMax to the union of every mesh's own bounds,
+    // placed by its node's scene transform, and returns whether there was
+    // anything to measure yet: a mesh only gets its bounds once it has
+    // been through a frame, until then they read as empty (which is why
+    // this runs from frameSwapped below rather than on load).
+    //
+    // Not loader.bounds: for this model that is (-0.03, 0, 0)..(0.86, 1.1,
+    // 1.022) against a real extent of +-0.82 x 0..1.5 x +-0.80, before
+    // and after the first frame alike - just the span of where the prop
+    // nodes sit, without the character. Skinned meshes are measured in
+    // their bind pose (a skinned node's own transform doesn't apply),
+    // which is where the model stands when no clip moves it.
+    function measureModel() {
+        let lo = Qt.vector3d(Infinity, Infinity, Infinity)
+        let hi = Qt.vector3d(-Infinity, -Infinity, -Infinity)
+        function visit(node) {
+            if (node instanceof Model) {
+                const a = node.bounds.minimum
+                const b = node.bounds.maximum
+                if (!a.fuzzyEquals(b)) {
+                    for (let i = 0; i < 8; ++i) {
+                        const corner = Qt.vector3d(i & 1 ? a.x : b.x, i & 2 ? a.y : b.y, i & 4 ? a.z : b.z)
+                        const p = node.skin ? corner : node.mapPositionToScene(corner)
+                        lo = Qt.vector3d(Math.min(lo.x, p.x), Math.min(lo.y, p.y), Math.min(lo.z, p.z))
+                        hi = Qt.vector3d(Math.max(hi.x, p.x), Math.max(hi.y, p.y), Math.max(hi.z, p.z))
+                    }
+                }
+            }
+            for (let i = 0; i < node.children.length; ++i)
+                visit(node.children[i])
+        }
+        visit(loader)
+        if (lo.x > hi.x)
+            return false
+        modelMin = lo
+        modelMax = hi
+        console.log("AwayPage: model bounds", modelMin, modelMax)
+        return true
+    }
+
+    // Stops drawing nodes that the model has scaled down to nothing.
+    // glTF can't animate visibility, so this model hides whatever a clip
+    // doesn't use by parking it at scale 1e-5 - the props, and 17 of its
+    // 18 lamp meshes at any one time, which is 229k of its 382k triangles.
+    // Quick3D still pushes all of that through the GPU every frame (dev1,
+    // default view, rendered offscreen and uncapped: 34 fps with them, 47
+    // without). So `visible` follows the scale for every
+    // node that has meshes under it, switching back on the moment a clip
+    // scales the node up again.
+    function hideCollapsedNodes() {
+        function visit(node) {
+            let hasMesh = node instanceof Model
+            for (let i = 0; i < node.children.length; ++i)
+                hasMesh = visit(node.children[i]) || hasMesh
+            if (hasMesh && node !== loader) {
+                const update = function() {
+                    const s = node.scale
+                    node.visible = Math.max(Math.abs(s.x), Math.abs(s.y), Math.abs(s.z)) > 0.001
+                }
+                node.scaleChanged.connect(update)
+                update()
+            }
+            return hasMesh
+        }
+        visit(loader)
+    }
+
+    // Clips (glTF animations) in the loaded model, and the one playing.
+    property var clipNames: []
+    property string currentClip: ""
+
+    // Cross-fade length for clip switches, see TimelineLoopCloser::playClip.
+    readonly property int fadeMs: 250
+
+    // Switches to clip `name` right away, cross-faded from wherever the
+    // playing clip is.
+    function requestClip(name) {
+        timelineLoopCloser.playClip(loader, name, fadeMs)
+    }
+    function stepClip(delta) {
+        if (clipNames.length === 0)
+            return
+        const i = clipNames.indexOf(currentClip)
+        requestClip(clipNames[(i + delta + clipNames.length) % clipNames.length])
+    }
+
+    Connections {
+        target: timelineLoopCloser
+        function onClipStarted(sceneRoot, name) {
+            if (sceneRoot !== loader)
+                return
+            root.currentClip = name
+            // The clip restarts running, whatever the previous one was doing.
+            root.paused = false
+        }
+    }
 
     // It's a standby screen: don't leave it parked at whatever odd angle
     // the last person dragged it to. A few seconds after the last touch,
@@ -80,6 +246,7 @@ Item {
     }
 
     View3D {
+        id: view
         anchors.fill: parent
 
         environment: SceneEnvironment {
@@ -92,13 +259,14 @@ Item {
         // Yaw and pitch on separate nested nodes so the orbit doesn't
         // depend on Euler-angle composition order.
         Node {
-            position: Qt.vector3d(0, 0.58, 0)
+            position: root.pivot
             eulerRotation.y: root.yaw
 
             Node {
                 eulerRotation.x: root.pitch
 
                 PerspectiveCamera {
+                    id: camera
                     z: root.distance
                     // Default clipNear (10) clips away meter-scale glTF
                     // content at this camera distance (~3.5) - same fix
@@ -127,12 +295,31 @@ Item {
 
         RuntimeLoader {
             id: loader
-            source: Qt.resolvedUrl("../assets/away/CesiumMan.glb")
+            source: root.loadStarted ? root.modelSource : ""
             onStatusChanged: {
-                if (status === RuntimeLoader.Success)
+                root.modelMin = Qt.vector3d(0, 0, 0)
+                root.modelMax = Qt.vector3d(0, 0, 0)
+                if (status === RuntimeLoader.Success) {
                     timelineLoopCloser.closeLoops(loader)
-                else if (status === RuntimeLoader.Error)
+                    timelineLoopCloser.restoreHolds(loader)
+                    root.clipNames = timelineLoopCloser.clipNames(loader)
+                    // Through playClip() even for the clip RuntimeLoader
+                    // already started, so the other clips' animations
+                    // stop ticking in the background.
+                    if (root.clipNames.length > 0) {
+                        timelineLoopCloser.playClip(loader, root.clipNames[0])
+                        // Not left to onClipStarted: a model that loads
+                        // while the page is still being built gets here
+                        // before that Connections object exists.
+                        root.currentClip = root.clipNames[0]
+                    }
+                    if (root.cullCollapsed)
+                        root.hideCollapsedNodes()
+                    root.framesToMeasure = 600
+                } else if (status === RuntimeLoader.Error) {
+                    root.loadState = "error"
                     console.log("AwayPage: RuntimeLoader failed to load", source, "-", errorString)
+                }
             }
         }
 
@@ -181,7 +368,7 @@ Item {
             }
             onActiveScaleChanged: {
                 if (active)
-                    root.distance = Math.max(1.5, Math.min(8, startDistance / activeScale))
+                    root.distance = Math.max(root.defaultDistance * 0.4, Math.min(root.defaultDistance * 2.5, startDistance / activeScale))
             }
         }
     }
@@ -204,10 +391,24 @@ Item {
         text: "滑动旋转 · 双指缩放"
     }
 
+    // Loading / failure notice, see loadState. Text only: the GUI thread
+    // is stuck inside the load for most of the wait, so anything animated
+    // here would just sit frozen and look hung. (A render-thread Animator
+    // does keep moving, but on dev1 it made the model appear a full second
+    // later - 3.0s instead of 1.9s from page creation.)
+    Text {
+        visible: root.loadState !== "ready"
+        anchors.centerIn: parent
+        color: "#9e9e9e"
+        font.pixelSize: 32
+        text: root.loadState === "error" ? "模型加载失败" : "模型加载中…"
+    }
+
     // Freezes the generated TimelineAnimation (unreachable from QML, hence
     // the C++ helper - see core/TimelineLoopCloser.h). Orbiting still
     // works while paused.
     Button {
+        visible: root.loadState === "ready"
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.margins: 16
@@ -215,6 +416,33 @@ Item {
         onClicked: {
             root.paused = !root.paused
             timelineLoopCloser.setPaused(loader, root.paused)
+        }
+    }
+
+    // Steps through the model's clips, so every one of them can be checked
+    // on the device. Stand-in for the real thing (events picking clips).
+    Row {
+        visible: root.loadState === "ready" && root.clipNames.length > 1
+        anchors.bottom: parent.bottom
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.margins: 16
+        spacing: 12
+
+        Button {
+            text: "◀"
+            onClicked: root.stepClip(-1)
+        }
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            width: 330
+            horizontalAlignment: Text.AlignHCenter
+            color: "#9e9e9e"
+            font.pixelSize: 28
+            text: root.currentClip + "\n" + (root.clipNames.indexOf(root.currentClip) + 1) + " / " + root.clipNames.length
+        }
+        Button {
+            text: "▶"
+            onClicked: root.stepClip(1)
         }
     }
 
