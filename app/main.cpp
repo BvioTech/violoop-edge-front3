@@ -6,6 +6,7 @@
 #include "core/RestClient.h"
 #include "core/SseClient.h"
 #include "core/StatusStore.h"
+#include "core/SystemStats.h"
 #include "core/TestVerdictStore.h"
 #include "core/TimelineLoopCloser.h"
 #include "core/UpgradeStore.h"
@@ -29,6 +30,7 @@ int main(int argc, char *argv[])
     auto *upgrade = new UpgradeStore(rest, sse, &engine);
     auto *nav = new NavController(QStringLiteral("HomePage.qml"), &engine);
     auto *timelineLoopCloser = new TimelineLoopCloser(&engine);
+    auto *systemStats = new SystemStats(&engine);
 
     engine.rootContext()->setContextProperty("nav", nav);
     engine.rootContext()->setContextProperty("restClient", rest);
@@ -38,6 +40,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("testVerdictStore", testVerdicts);
     engine.rootContext()->setContextProperty("upgradeStore", upgrade);
     engine.rootContext()->setContextProperty("timelineLoopCloser", timelineLoopCloser);
+    engine.rootContext()->setContextProperty("systemStats", systemStats);
 
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed,

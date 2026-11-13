@@ -512,12 +512,57 @@ Item {
     }
 
     Text {
+        id: hint
         anchors.top: parent.top
         anchors.right: parent.right
         anchors.margins: 16
         color: "#616161"
         font.pixelSize: 24
         text: "滑动旋转 · 双指缩放"
+    }
+
+    // What rendering the model costs, live: frames actually put on screen
+    // over the last second (counted here), and the machine's CPU load,
+    // GPU load and SoC temperature (core/SystemStats.h, which only reads
+    // them while this page is up). "-" for a value this machine doesn't
+    // have. The frame rate drops to 0 while paused with nothing moving:
+    // nothing is redrawn then.
+    property int framesSwapped: 0
+    property real fps: -1
+    Connections {
+        target: root.Window.window
+        function onFrameSwapped() { root.framesSwapped += 1 }
+    }
+    Timer {
+        interval: 1000
+        repeat: true
+        running: true
+        property double last: Date.now()
+        onTriggered: {
+            const now = Date.now()
+            root.fps = root.framesSwapped * 1000 / Math.max(1, now - last)
+            root.framesSwapped = 0
+            last = now
+        }
+    }
+    Binding { target: systemStats; property: "active"; value: true }
+    Component.onDestruction: systemStats.active = false
+
+    Text {
+        anchors.top: hint.bottom
+        anchors.right: parent.right
+        anchors.topMargin: 8
+        anchors.rightMargin: 16
+        horizontalAlignment: Text.AlignRight
+        color: "#9e9e9e"
+        font.pixelSize: 24
+        function show(value, digits, unit) {
+            return value < 0 ? "-" : value.toFixed(digits) + unit
+        }
+        text: "帧率 " + show(root.fps, 0, " fps")
+              + "\nCPU " + show(systemStats.cpuLoad, 0, "%")
+              + "\nGPU " + show(systemStats.gpuLoad, 0, "%")
+              + "\nSoC " + show(systemStats.socTemp, 1, "°C")
     }
 
     // Loading / failure notice, see loadState. Text only: the GUI thread

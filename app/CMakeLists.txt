@@ -14,6 +14,7 @@ qt_add_executable(violoop_edge_kiosk_qt
     core/StatusStore.cpp core/StatusStore.h
     core/TestVerdictStore.cpp core/TestVerdictStore.h
     core/TimelineLoopCloser.cpp core/TimelineLoopCloser.h
+    core/SystemStats.cpp core/SystemStats.h
     core/UpgradeStore.cpp core/UpgradeStore.h
 )
 
