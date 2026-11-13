@@ -15,6 +15,8 @@ qt_add_executable(violoop_edge_kiosk_qt
     core/StatusStore.cpp core/StatusStore.h
     core/TestVerdictStore.cpp core/TestVerdictStore.h
     core/TimelineLoopCloser.cpp core/TimelineLoopCloser.h
+    core/SystemStats.cpp core/SystemStats.h
+    core/PerfRecorder.cpp core/PerfRecorder.h
     core/UpgradeStore.cpp core/UpgradeStore.h
 )
 
@@ -68,6 +70,9 @@ qt_add_qml_module(violoop_edge_kiosk_qt
         # glTF-Sample-Models' CesiumMan, CC0). Kept as the lightweight
         # baseline every real-hardware number so far was measured with.
         assets/away/CesiumMan.glb
+        # Light probe for qml/AwayPage.qml, written by
+        # scripts/make-away-probe.py.
+        assets/away/studio-probe.hdr
 )
 
 target_link_libraries(violoop_edge_kiosk_qt PRIVATE
