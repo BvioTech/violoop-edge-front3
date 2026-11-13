@@ -423,7 +423,7 @@ parent.verticalCenter` 跟按钮对齐，换成 `Flow` 之后这个 anchors 整�
 build-release.yml` 的结构（同样是手工 `dpkg-deb --build`，没有
 `debian/rules`/`dpkg-buildpackage`；同样在 `ubuntu-22.04-arm` 原生 arm64
 runner 上跑，不做交叉编译；同样靠打 `v*` tag 触发、`workflow_dispatch`
-只构建不发布；同样的 HMAC webhook 通知 `deb.violoop.ai/hook/release`）。
+只构建不发布；当时还带一步 HMAC webhook 通知 apt 仓，该 webhook 弃用后已删除）。
 和 Flutter 版本比，这边简单很多——`qt_add_qml_module` 把整棵 QML 树编译
 进了二进制本体（Qt Resource System），打包阶段不用像 Flutter bundle 那样
 拷贝一堆松散文件，staging 树里就一个可执行文件。

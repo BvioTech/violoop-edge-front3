@@ -68,8 +68,8 @@ bash scripts/build-deb.sh arm64
 ```
 
 CI（`.github/workflows/build-release.yml`，仓库根目录）：`ubuntu-22.04-arm`
-原生 runner、`v*` tag 触发发布、HMAC webhook 通知
-`deb.violoop.ai/hook/release`。
+原生 runner、`v*` tag 触发发布（创建 GitHub Release；apt 仓轮询收录，
+流水线不再发 webhook）。
 
 **包名/服务名和生产 Flutter 包（`violoop-edge-front`）完全独立**，不设
 `Provides`/`Replaces`/`Conflicts`，安装本包不会顶掉生产 kiosk，`postinst`
