@@ -8,6 +8,7 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Network Quick3D)
 
 qt_add_executable(violoop_edge_kiosk_qt
     main.cpp
+    core/JournalLog.cpp core/JournalLog.h
     core/NavController.cpp core/NavController.h
     core/RestClient.cpp core/RestClient.h
     core/SseClient.cpp core/SseClient.h

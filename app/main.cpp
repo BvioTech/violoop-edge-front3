@@ -2,6 +2,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 
+#include "core/JournalLog.h"
 #include "core/NavController.h"
 #include "core/RestClient.h"
 #include "core/SseClient.h"
@@ -12,6 +13,9 @@
 
 int main(int argc, char *argv[])
 {
+    // Before QGuiApplication, so platform plugin warnings get a level too.
+    installJournalLogHandler();
+
     QGuiApplication app(argc, argv);
 
     QQmlApplicationEngine engine;

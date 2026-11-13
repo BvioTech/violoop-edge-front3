@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QSet>
 #include <QTimer>
 #include <QVariantList>
 
@@ -82,10 +83,13 @@ private:
     void refreshAll();
     void onSucceeded(const QString &path, int statusCode, const QString &body);
     void onFailed(const QString &path, const QString &errorString);
+    void noteRecovered(const QString &path);
 
     RestClient *m_rest;
     QTimer m_pollTimer;
     bool m_started = false;
+    // Paths whose last poll failed - see onFailed().
+    QSet<QString> m_failingPaths;
 
     bool m_wifiKnown = false;
     bool m_wifiConnected = false;
