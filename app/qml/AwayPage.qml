@@ -161,39 +161,22 @@ Item {
         visit(loader)
     }
 
-    // Clips (glTF animations) in the loaded model, the one playing, and
-    // the one waiting for the playing one to finish its loop (if any).
+    // Clips (glTF animations) in the loaded model, and the one playing.
     property var clipNames: []
     property string currentClip: ""
-    property string pendingClip: ""
 
     // Cross-fade length for clip switches, see TimelineLoopCloser::playClip.
     readonly property int fadeMs: 250
 
-    // Idle clips are ambient: nothing is waiting on them, so going from
-    // one to another can afford to be seamless. Everything else answers
-    // something that just happened and has to show up at once.
-    function isIdleClip(name) {
-        return name.startsWith("idle.")
-    }
-
-    // Switches to clip `name`: between two idle clips at the end of the
-    // current loop, otherwise immediately; cross-faded either way.
+    // Switches to clip `name` right away, cross-faded from wherever the
+    // playing clip is.
     function requestClip(name) {
-        if (isIdleClip(currentClip) && isIdleClip(name) && !paused) {
-            // Set first: if nothing is playing the switch happens inside
-            // the call, and onClipStarted clears it again.
-            pendingClip = name
-            if (!timelineLoopCloser.playClipAtLoopEnd(loader, name, fadeMs))
-                pendingClip = ""
-        } else {
-            timelineLoopCloser.playClip(loader, name, fadeMs)
-        }
+        timelineLoopCloser.playClip(loader, name, fadeMs)
     }
     function stepClip(delta) {
         if (clipNames.length === 0)
             return
-        const i = clipNames.indexOf(pendingClip !== "" ? pendingClip : currentClip)
+        const i = clipNames.indexOf(currentClip)
         requestClip(clipNames[(i + delta + clipNames.length) % clipNames.length])
     }
 
@@ -203,7 +186,6 @@ Item {
             if (sceneRoot !== loader)
                 return
             root.currentClip = name
-            root.pendingClip = ""
             // The clip restarts running, whatever the previous one was doing.
             root.paused = false
         }
@@ -306,7 +288,6 @@ Item {
                         // while the page is still being built gets here
                         // before that Connections object exists.
                         root.currentClip = root.clipNames[0]
-                        root.pendingClip = ""
                     }
                     if (root.cullCollapsed)
                         root.hideCollapsedNodes()
@@ -417,9 +398,7 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             color: "#9e9e9e"
             font.pixelSize: 28
-            text: root.currentClip + "\n"
-                  + (root.pendingClip !== "" ? "→ " + root.pendingClip
-                                             : (root.clipNames.indexOf(root.currentClip) + 1) + " / " + root.clipNames.length)
+            text: root.currentClip + "\n" + (root.clipNames.indexOf(root.currentClip) + 1) + " / " + root.clipNames.length
         }
         Button {
             text: "▶"

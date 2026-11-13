@@ -127,7 +127,6 @@ bool TimelineLoopCloser::playClip(QObject *sceneRoot, const QString &name, int f
         qWarning() << "TimelineLoopCloser: no clip named" << name;
         return false;
     }
-    cancelQueued();
     // A fade still in progress simply becomes part of the pose captured
     // below.
     cancelFade();
@@ -223,71 +222,6 @@ void TimelineLoopCloser::cancelFade()
         disconnect(m_fadeTimeline, SIGNAL(currentFrameChanged()), this, SLOT(onFadeFrame()));
     m_fadeTimeline = nullptr;
     m_faded.clear();
-}
-
-bool TimelineLoopCloser::playClipAtLoopEnd(QObject *sceneRoot, const QString &name, int fadeMs)
-{
-    const auto clips = findClips(sceneRoot);
-    const Clip *wanted = nullptr;
-    const Clip *playing = nullptr;
-    for (const Clip &clip : clips) {
-        if (clip.name == name)
-            wanted = &clip;
-        if (clip.timeline->property("enabled").toBool() && clip.animation
-            && clip.animation->property("running").toBool())
-            playing = &clip;
-    }
-    if (!wanted) {
-        qWarning() << "TimelineLoopCloser: no clip named" << name;
-        return false;
-    }
-    if (!playing)
-        return playClip(sceneRoot, name, fadeMs); // nothing to wait for
-
-    cancelQueued();
-    m_queuedOn = playing->timeline;
-    m_queuedScene = sceneRoot;
-    m_queuedName = name;
-    m_queuedFadeMs = fadeMs;
-    m_queuedLastFrame = playing->timeline->property("currentFrame").toReal();
-    connect(playing->timeline, SIGNAL(currentFrameChanged()), this, SLOT(onQueuedFrame()));
-    return true;
-}
-
-void TimelineLoopCloser::onQueuedFrame()
-{
-    if (!m_queuedOn)
-        return;
-    const qreal frame = m_queuedOn->property("currentFrame").toReal();
-    const bool wrapped = frame < m_queuedLastFrame;
-    m_queuedLastFrame = frame;
-    if (!wrapped)
-        return;
-    // Not from inside the old timeline's own change signal (this slot):
-    // the switch stops the animation that is emitting it.
-    disconnect(m_queuedOn, SIGNAL(currentFrameChanged()), this, SLOT(onQueuedFrame()));
-    QMetaObject::invokeMethod(this, "startQueued", Qt::QueuedConnection);
-}
-
-void TimelineLoopCloser::startQueued()
-{
-    if (!m_queuedOn || !m_queuedScene) {
-        cancelQueued();
-        return;
-    }
-    const QString name = m_queuedName;
-    QObject *scene = m_queuedScene;
-    const int fadeMs = m_queuedFadeMs;
-    playClip(scene, name, fadeMs); // also clears the queue
-}
-
-void TimelineLoopCloser::cancelQueued()
-{
-    if (m_queuedOn)
-        disconnect(m_queuedOn, SIGNAL(currentFrameChanged()), this, SLOT(onQueuedFrame()));
-    m_queuedOn = nullptr;
-    m_queuedScene = nullptr;
-    m_queuedName.clear();
 }
 
 int TimelineLoopCloser::restoreHolds(QObject *sceneRoot)

@@ -86,13 +86,6 @@ public:
     // props and lamp colours still cut, only the motion is smoothed.
     Q_INVOKABLE bool playClip(QObject *sceneRoot, const QString &name, int fadeMs = 0);
 
-    // Like playClip(), but lets the clip that is playing finish its
-    // current loop first and switches at the wrap-around. For clips that
-    // start and end in the same pose (17 of VIO_DesktopPet.glb's 19 start
-    // from the rest pose) that is seamless even without a fade. A later
-    // playClip()/playClipAtLoopEnd() replaces a switch still waiting.
-    Q_INVOKABLE bool playClipAtLoopEnd(QObject *sceneRoot, const QString &name, int fadeMs = 0);
-
     // Undoes the importer's keyframe thinning where it changes the motion.
     // The importer drops every keyframe whose value equals the previous
     // kept one, including the *last* key of a run of identical values -
@@ -133,8 +126,6 @@ signals:
 
 private slots:
     void onFadeFrame();
-    void onQueuedFrame();
-    void startQueued();
 
 private:
     // One property being cross-faded.
@@ -147,15 +138,8 @@ private:
         QVariant to;            // otherwise: where it came to rest
     };
     void cancelFade();
-    void cancelQueued();
 
     QPointer<QObject> m_fadeTimeline;
     QList<Faded> m_faded;
     int m_fadeMs = 0;
-
-    QPointer<QObject> m_queuedOn;   // timeline whose wrap-around we wait for
-    QPointer<QObject> m_queuedScene;
-    QString m_queuedName;
-    int m_queuedFadeMs = 0;
-    qreal m_queuedLastFrame = 0;
 };
