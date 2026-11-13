@@ -1,7 +1,11 @@
 #pragma once
 
+#include <QByteArray>
+#include <QList>
 #include <QObject>
+#include <QPointer>
 #include <QStringList>
+#include <QVariant>
 
 // Makes the glTF animation that Quick3D's RuntimeLoader auto-plays loop
 // seamlessly. RuntimeLoader turns a glTF animation into a QtQuickTimeline
@@ -68,8 +72,26 @@ public:
     // clip's mid-animation pose as the rest pose. That reset is also what
     // makes clips that hide/show props by scale (this model parks unused
     // props at scale 1e-5) not leak props into the next clip. Returns
-    // false if there is no clip called `name`.
-    Q_INVOKABLE bool playClip(QObject *sceneRoot, const QString &name);
+    // false if there is no clip called `name`; emits clipStarted().
+    //
+    // fadeMs > 0 cross-fades instead of cutting: QtQuickTimeline cannot
+    // blend two timelines, so the pose on screen at the moment of the
+    // switch is captured, and for the first fadeMs of the new clip every
+    // position/rotation/scale either clip animates is written as a blend
+    // from that captured value to whatever the new clip just set (or to
+    // the rest value, for properties only the old clip animated), right
+    // after the new timeline evaluates each frame. The blend's progress
+    // is the new clip's own frame counter, so pausing pauses the fade.
+    // Hidden<->shown scale switches (see restoreHolds) are left out:
+    // props and lamp colours still cut, only the motion is smoothed.
+    Q_INVOKABLE bool playClip(QObject *sceneRoot, const QString &name, int fadeMs = 0);
+
+    // Like playClip(), but lets the clip that is playing finish its
+    // current loop first and switches at the wrap-around. For clips that
+    // start and end in the same pose (17 of VIO_DesktopPet.glb's 19 start
+    // from the rest pose) that is seamless even without a fade. A later
+    // playClip()/playClipAtLoopEnd() replaces a switch still waiting.
+    Q_INVOKABLE bool playClipAtLoopEnd(QObject *sceneRoot, const QString &name, int fadeMs = 0);
 
     // Undoes the importer's keyframe thinning where it changes the motion.
     // The importer drops every keyframe whose value equals the previous
@@ -104,4 +126,36 @@ public:
     // after load, like closeLoops(); returns the number of keys inserted
     // (0 on a second call).
     Q_INVOKABLE int restoreHolds(QObject *sceneRoot);
+
+signals:
+    // `name` has just become the playing clip of `sceneRoot`.
+    void clipStarted(QObject *sceneRoot, const QString &name);
+
+private slots:
+    void onFadeFrame();
+    void onQueuedFrame();
+    void startQueued();
+
+private:
+    // One property being cross-faded.
+    struct Faded
+    {
+        QPointer<QObject> target;
+        QByteArray property;
+        QVariant from;          // on screen when the switch happened
+        bool animatedByNew;     // new clip writes it every frame
+        QVariant to;            // otherwise: where it came to rest
+    };
+    void cancelFade();
+    void cancelQueued();
+
+    QPointer<QObject> m_fadeTimeline;
+    QList<Faded> m_faded;
+    int m_fadeMs = 0;
+
+    QPointer<QObject> m_queuedOn;   // timeline whose wrap-around we wait for
+    QPointer<QObject> m_queuedScene;
+    QString m_queuedName;
+    int m_queuedFadeMs = 0;
+    qreal m_queuedLastFrame = 0;
 };

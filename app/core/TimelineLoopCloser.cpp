@@ -3,6 +3,7 @@
 #include <QDebug>
 #include <QList>
 #include <QPair>
+#include <QQuaternion>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQmlListReference>
@@ -67,6 +68,35 @@ bool isCollapsed(const QVariant &scale)
 // below one display frame, so no rendered frame lands inside it.
 const qreal switchFrames = 0.01;
 
+// Whether going from `from` to `to` on `property` is the model switching
+// something on or off rather than moving it.
+bool isSwitch(const QByteArray &property, const QVariant &from, const QVariant &to)
+{
+    return property == "scale" && isCollapsed(from) != isCollapsed(to);
+}
+
+// A property some keyframe group of a timeline animates.
+struct Animated
+{
+    QObject *target;
+    QByteArray property;
+};
+
+QList<Animated> animatedProperties(QObject *timeline)
+{
+    QList<Animated> result;
+    const auto children = timeline->findChildren<QObject *>();
+    for (QObject *group : children) {
+        if (!group->inherits("QQuickKeyframeGroup"))
+            continue;
+        QObject *target = group->property("target").value<QObject *>();
+        const QByteArray property = group->property("property").toString().toLatin1();
+        if (target && !property.isEmpty())
+            result.append({ target, property });
+    }
+    return result;
+}
+
 } // namespace
 
 TimelineLoopCloser::TimelineLoopCloser(QObject *parent)
@@ -83,7 +113,7 @@ QStringList TimelineLoopCloser::clipNames(QObject *sceneRoot)
     return names;
 }
 
-bool TimelineLoopCloser::playClip(QObject *sceneRoot, const QString &name)
+bool TimelineLoopCloser::playClip(QObject *sceneRoot, const QString &name, int fadeMs)
 {
     const auto clips = findClips(sceneRoot);
     const Clip *wanted = nullptr;
@@ -97,19 +127,167 @@ bool TimelineLoopCloser::playClip(QObject *sceneRoot, const QString &name)
         qWarning() << "TimelineLoopCloser: no clip named" << name;
         return false;
     }
+    cancelQueued();
+    // A fade still in progress simply becomes part of the pose captured
+    // below.
+    cancelFade();
+
+    // What is on screen now, for every property a playing clip animates.
+    QList<Faded> faded;
+    if (fadeMs > 0) {
+        for (const Clip &clip : clips) {
+            if (!clip.timeline->property("enabled").toBool())
+                continue;
+            for (const Animated &a : animatedProperties(clip.timeline))
+                faded.append({ a.target, a.property, a.target->property(a.property), false, QVariant() });
+        }
+    }
 
     // Old clip(s) off first - see the header for why the order matters.
     for (const Clip &clip : clips) {
-        if (&clip == wanted)
-            continue;
         if (clip.animation)
             clip.animation->setProperty("running", false);
         clip.timeline->setProperty("enabled", false);
     }
+    // Rewind before enabling: a clip that has played before was left
+    // wherever it was stopped, and both the first frame shown and the
+    // fade's progress read this.
+    wanted->timeline->setProperty("currentFrame", wanted->timeline->property("startFrame"));
     wanted->timeline->setProperty("enabled", true);
     if (wanted->animation)
         QMetaObject::invokeMethod(wanted->animation, "restart");
+
+    if (fadeMs > 0) {
+        // Only properties the old clip animated are faded. One that just
+        // the new clip animates was at rest before the switch and the new
+        // clip takes it from there by itself.
+        const auto animatedNow = animatedProperties(wanted->timeline);
+        for (Faded &f : faded) {
+            for (const Animated &a : animatedNow) {
+                if (a.target == f.target && a.property == f.property) {
+                    f.animatedByNew = true;
+                    break;
+                }
+            }
+            if (!f.animatedByNew)
+                f.to = f.target->property(f.property);
+        }
+        // Drop what cannot or need not be blended.
+        faded.removeIf([](const Faded &f) {
+            const int type = f.from.userType();
+            if (type != QMetaType::QVector3D && type != QMetaType::QQuaternion)
+                return true;
+            return !f.animatedByNew && (f.from == f.to || isSwitch(f.property, f.from, f.to));
+        });
+        if (!faded.isEmpty()) {
+            m_faded = faded;
+            m_fadeMs = fadeMs;
+            m_fadeTimeline = wanted->timeline;
+            connect(wanted->timeline, SIGNAL(currentFrameChanged()), this, SLOT(onFadeFrame()));
+            onFadeFrame(); // frame 0: back to the captured pose before anything renders
+        }
+    }
+
+    emit clipStarted(sceneRoot, name);
     return true;
+}
+
+void TimelineLoopCloser::onFadeFrame()
+{
+    if (!m_fadeTimeline) {
+        cancelFade();
+        return;
+    }
+    const qreal t = qBound(0.0, m_fadeTimeline->property("currentFrame").toReal() / m_fadeMs, 1.0);
+    const float eased = float(t * t * (3 - 2 * t)); // smoothstep
+    for (const Faded &f : std::as_const(m_faded)) {
+        if (!f.target)
+            continue;
+        const QVariant to = f.animatedByNew ? f.target->property(f.property) : f.to;
+        if (f.animatedByNew && (t >= 1 || isSwitch(f.property, f.from, to)))
+            continue; // the clip's own value stands
+        if (to.userType() == QMetaType::QQuaternion) {
+            f.target->setProperty(f.property, QQuaternion::slerp(f.from.value<QQuaternion>(), to.value<QQuaternion>(), eased));
+        } else {
+            const QVector3D a = f.from.value<QVector3D>();
+            f.target->setProperty(f.property, a + (to.value<QVector3D>() - a) * eased);
+        }
+    }
+    if (t >= 1)
+        cancelFade();
+}
+
+void TimelineLoopCloser::cancelFade()
+{
+    if (m_fadeTimeline)
+        disconnect(m_fadeTimeline, SIGNAL(currentFrameChanged()), this, SLOT(onFadeFrame()));
+    m_fadeTimeline = nullptr;
+    m_faded.clear();
+}
+
+bool TimelineLoopCloser::playClipAtLoopEnd(QObject *sceneRoot, const QString &name, int fadeMs)
+{
+    const auto clips = findClips(sceneRoot);
+    const Clip *wanted = nullptr;
+    const Clip *playing = nullptr;
+    for (const Clip &clip : clips) {
+        if (clip.name == name)
+            wanted = &clip;
+        if (clip.timeline->property("enabled").toBool() && clip.animation
+            && clip.animation->property("running").toBool())
+            playing = &clip;
+    }
+    if (!wanted) {
+        qWarning() << "TimelineLoopCloser: no clip named" << name;
+        return false;
+    }
+    if (!playing)
+        return playClip(sceneRoot, name, fadeMs); // nothing to wait for
+
+    cancelQueued();
+    m_queuedOn = playing->timeline;
+    m_queuedScene = sceneRoot;
+    m_queuedName = name;
+    m_queuedFadeMs = fadeMs;
+    m_queuedLastFrame = playing->timeline->property("currentFrame").toReal();
+    connect(playing->timeline, SIGNAL(currentFrameChanged()), this, SLOT(onQueuedFrame()));
+    return true;
+}
+
+void TimelineLoopCloser::onQueuedFrame()
+{
+    if (!m_queuedOn)
+        return;
+    const qreal frame = m_queuedOn->property("currentFrame").toReal();
+    const bool wrapped = frame < m_queuedLastFrame;
+    m_queuedLastFrame = frame;
+    if (!wrapped)
+        return;
+    // Not from inside the old timeline's own change signal (this slot):
+    // the switch stops the animation that is emitting it.
+    disconnect(m_queuedOn, SIGNAL(currentFrameChanged()), this, SLOT(onQueuedFrame()));
+    QMetaObject::invokeMethod(this, "startQueued", Qt::QueuedConnection);
+}
+
+void TimelineLoopCloser::startQueued()
+{
+    if (!m_queuedOn || !m_queuedScene) {
+        cancelQueued();
+        return;
+    }
+    const QString name = m_queuedName;
+    QObject *scene = m_queuedScene;
+    const int fadeMs = m_queuedFadeMs;
+    playClip(scene, name, fadeMs); // also clears the queue
+}
+
+void TimelineLoopCloser::cancelQueued()
+{
+    if (m_queuedOn)
+        disconnect(m_queuedOn, SIGNAL(currentFrameChanged()), this, SLOT(onQueuedFrame()));
+    m_queuedOn = nullptr;
+    m_queuedScene = nullptr;
+    m_queuedName.clear();
 }
 
 int TimelineLoopCloser::restoreHolds(QObject *sceneRoot)
@@ -171,8 +349,7 @@ int TimelineLoopCloser::restoreHolds(QObject *sceneRoot)
                 // header. It must not be interpolated at all, whether or
                 // not keys were dropped in it.
                 const bool isSwitch = isScale
-                    && isCollapsed(keys[i - 1].object->property("value"))
-                           != isCollapsed(keys[i].object->property("value"));
+                    && ::isSwitch("scale", keys[i - 1].object->property("value"), keys[i].object->property("value"));
                 const qreal gap = keys[i].frame - keys[i - 1].frame;
                 if (!isSwitch && gap < interval * 1.5)
                     continue;
