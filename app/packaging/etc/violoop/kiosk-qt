@@ -12,3 +12,8 @@ EDGE_API_BASE=http://127.0.0.1:9090
 # service, not proxied by violoop-edge. See app/qml/TestLlmModelPage.qml,
 # the only consumer. Uncomment only if it differs from the default.
 #EDGE_LLM_API_BASE=http://127.0.0.1:8000
+
+# Page to open on top of the home page at startup, for unattended runs
+# (burn-in on the away page: AwayPage.qml) - see app/main.cpp. Leave unset
+# in normal use.
+#EDGE_KIOSK_OPEN_PAGE=AwayPage.qml

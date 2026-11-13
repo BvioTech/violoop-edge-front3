@@ -51,6 +51,14 @@ int main(int argc, char *argv[])
         Qt::QueuedConnection);
     engine.load(QUrl(QStringLiteral("qrc:/EdgeFrontQt/qml/AppShell.qml")));
 
+    // For unattended runs (burn-in): open a page on top of the home page
+    // right at startup, e.g. EDGE_KIOSK_OPEN_PAGE=AwayPage.qml, so the run
+    // needs nobody to tap its way there - also not after the service has
+    // restarted the app. Unset in normal use.
+    const QByteArray openPage = qgetenv("EDGE_KIOSK_OPEN_PAGE");
+    if (!openPage.isEmpty())
+        nav->push(QString::fromLocal8Bit(openPage));
+
     // App-lifetime singletons started once here, same pattern as
     // ../../edge-front2/lib/app.dart: one SSE connection and one status
     // poller for the whole process, not re-created per page.
