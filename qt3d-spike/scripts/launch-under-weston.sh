@@ -33,13 +33,18 @@ rm -f "$XDG_RUNTIME_DIR/wayland-0" "$XDG_RUNTIME_DIR/wayland-0.lock"
 
 RUN_DIR="${RUNTIME_DIRECTORY:-/tmp/violoop-edge-kiosk}"
 mkdir -p "$RUN_DIR"
+# No repaint-window in [core] below, on purpose. The launchers this one
+# descends from set repaint-window=-1, which holds every client on this
+# 60 Hz panel to 30 fps: weston then starts compositing too late for the
+# next refresh, so each frame goes out one refresh behind (measured on
+# dev1, 2026-11-13: 28-29 fps with -1 or 0, 46-57 with weston's default of
+# 7 ms - see app/README.md, "性能标杆").
 WESTON_INI="$RUN_DIR/weston.ini"
 cat >"$WESTON_INI" <<INI
 [core]
 backend=drm-backend.so
 require-input=false
 idle-time=0
-repaint-window=-1
 xwayland=false
 
 [shell]
