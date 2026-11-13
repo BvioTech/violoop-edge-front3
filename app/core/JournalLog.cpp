@@ -1,6 +1,7 @@
 #include "JournalLog.h"
 
 #include <QByteArray>
+#include <QList>
 #include <QString>
 #include <QtLogging>
 
