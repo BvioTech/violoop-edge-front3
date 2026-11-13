@@ -391,51 +391,17 @@ Item {
         text: "滑动旋转 · 双指缩放"
     }
 
-    // Loading / failure notice, see loadState. The spinner stands still
-    // for the ~1.5s the GUI thread is stuck inside the load and only turns
-    // before and after. A RotationAnimator (render thread) does keep
-    // turning through it, but on dev1 it made the model appear a full
-    // second later (3.0s instead of 1.9s from page creation), so no.
-    Column {
+    // Loading / failure notice, see loadState. Text only: the GUI thread
+    // is stuck inside the load for most of the wait, so anything animated
+    // here would just sit frozen and look hung. (A render-thread Animator
+    // does keep moving, but on dev1 it made the model appear a full second
+    // later - 3.0s instead of 1.9s from page creation.)
+    Text {
         visible: root.loadState !== "ready"
         anchors.centerIn: parent
-        spacing: 24
-
-        Item {
-            visible: root.loadState === "loading"
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: 72
-            height: 72
-
-            Rectangle {
-                anchors.fill: parent
-                radius: width / 2
-                color: "transparent"
-                border.color: "#424242"
-                border.width: 6
-            }
-            Rectangle {
-                anchors.horizontalCenter: parent.horizontalCenter
-                y: -3
-                width: 12
-                height: 12
-                radius: 6
-                color: "#80deea"
-            }
-            RotationAnimation on rotation {
-                from: 0
-                to: 360
-                duration: 1000
-                loops: Animation.Infinite
-                running: root.loadState === "loading"
-            }
-        }
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            color: "#9e9e9e"
-            font.pixelSize: 32
-            text: root.loadState === "error" ? "模型加载失败" : "模型加载中…"
-        }
+        color: "#9e9e9e"
+        font.pixelSize: 32
+        text: root.loadState === "error" ? "模型加载失败" : "模型加载中…"
     }
 
     // Freezes the generated TimelineAnimation (unreachable from QML, hence
