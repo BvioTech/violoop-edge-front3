@@ -58,12 +58,14 @@ qt_add_qml_module(violoop_edge_kiosk_qt
         qml/VersionPage.qml
         qml/AwayPage.qml
     RESOURCES
-        # Placeholder skeletal-animation asset (Khronos glTF-Sample-Models'
-        # CesiumMan, CC0) - stands in for a production mascot model, which
-        # doesn't exist yet. Tracked via git-lfs (see ../.gitattributes),
-        # not fetched by a script like qt3d-spike's own copy: this one
-        # ships inside the installed app, so it has to be a real committed
-        # asset, not a dev-time-only download.
+        # The designer's mascot model, loaded by qml/AwayPage.qml. Tracked
+        # via git-lfs (see ../.gitattributes), not fetched by a script like
+        # qt3d-spike's assets: it ships inside the installed app, so it has
+        # to be a real committed asset, not a dev-time-only download.
+        assets/away/VIO_DesktopPet.glb
+        # The placeholder the page used before that (Khronos
+        # glTF-Sample-Models' CesiumMan, CC0). Kept as the lightweight
+        # baseline every real-hardware number so far was measured with.
         assets/away/CesiumMan.glb
 )
 
