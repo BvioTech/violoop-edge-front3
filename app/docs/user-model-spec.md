@@ -103,9 +103,11 @@ mesh，80 个材质（导入后合并为 61 个），15 张 PNG 贴图（最大 
   默认视角到 57 fps。真实屏幕上只会更低，需要实测。
 - **`loader.bounds` 不能用来做相机自适应**：对蒙皮模型它不包含角色本身。
   改为遍历各 `Model.bounds` 求并集，而且要等渲染过一帧之后才有值。
-- **偏暗**：材质是深色金属（baseColor 约 0.02–0.03、metallic 0.6 左右），
-  页面没有环境光照，机身和背面几乎全黑，只有高光和自
-  发光部分可见。大概率需要加 IBL（light probe），性能代价未测。
+- **偏暗**（已处理，已在 dev1 截图确认）：材质是深色金属（baseColor 约
+  0.02–0.03、metallic 0.6 左右），没有环境光照时机身和圆手几乎全黑，只有
+  高光和自发光部分可见。页面现在带一张自制的 light probe
+  （`assets/away/studio-probe.hdr`，由 `scripts/make-away-probe.py` 生成），
+  是设计师三张 HDR 到位之前的替代品。性能代价未测。
 
 - **动画之间的过渡**（已做）：任何时刻切换都立即进行，带 225 ms 交叉淡化
   （`TimelineLoopCloser::playClip` 的 `fadeMs`；QtQuickTimeline 本身不能

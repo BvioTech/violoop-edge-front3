@@ -199,6 +199,10 @@ Item {
     // its z, which the model keeps at 12.125 as a marker. Any of them can
     // stay null: a light without a scope lights everything, and without
     // the cue the lights sit at the model's normal state.
+    // Brightness of the stand-in light probe. Picked from screenshots on
+    // dev1 against the designer's render: at 1.0 the visor glass turns
+    // milky, well below this the shell goes back to black.
+    readonly property real probeExposure: 0.6
     property Model bodyModel: null
     property Model displayModel: null
     property Node lightCue: null
@@ -308,6 +312,13 @@ Item {
             backgroundMode: SceneEnvironment.Color
             antialiasingMode: SceneEnvironment.MSAA
             antialiasingQuality: SceneEnvironment.High
+            // What the dark metal shell, the glossy hands, the visor
+            // glass and the props are lit by - see the lights below.
+            lightProbe: Texture {
+                source: Qt.resolvedUrl("../assets/away/studio-probe.hdr")
+                mappingMode: Texture.LightProbe
+            }
+            probeExposure: root.probeExposure
         }
 
         // Yaw and pitch on separate nested nodes so the orbit doesn't
@@ -339,9 +350,12 @@ Item {
         // and color (root.lightPower / root.spill).
         //
         // That rig also has three HDR light probes and a glass shader,
-        // which this page does not have yet. Everything outside the two
+        // which this page does not have. Everything outside the two
         // scoped meshes (props, visor glass, lamps) is meant to be lit by
-        // those probes, so for now it shows by its emissive part only.
+        // those probes, and the dark metal shell and the hands show
+        // little without them (on dev1: near black). Until the designer's
+        // HDRs are here, the environment's single stand-in probe
+        // (assets/away/studio-probe.hdr) does that job.
         //
         // All of them stay fixed in the world (not parented to the camera
         // rig) on purpose: the shading changing as the camera orbits is
