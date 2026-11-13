@@ -7,7 +7,7 @@ import QtQuick3D.AssetUtils
 // animation via Quick3D's RuntimeLoader, the approach qt3d-spike spent
 // several real-hardware rounds validating (see
 // ../../qt3d-spike/docs/findings.md and ../../qt3d-spike/runtime_loader.qml,
-// which this page's View3D/camera/light setup mirrors). Unlike edge-front2's
+// which this page's View3D/camera setup mirrors). Unlike edge-front2's
 // AwayPage (lib/pages/away/away_page.dart), which composites a pre-baked
 // MP4 over a poster image, this renders the animation live - that's the
 // whole reason this module links Qt Quick3D (see ../../README.md's licensing
@@ -185,12 +185,66 @@ Item {
         visit(loader)
     }
 
+    // What the lights need from the loaded model (see the lights in the
+    // View3D below): the two meshes they are scoped to, and the node whose
+    // position the clips animate to say how bright and how warm the
+    // model's own lamps currently are.
+    //
+    // bodyModel is the multi-material skinned shell ("VIO" in the file),
+    // displayModel the inner face with the normal map ("Display"),
+    // lightCue the empty node "VioLightCue", position (power, warmth, _).
+    // Looked up by glTF node name, falling back on what the nodes look
+    // like - which is what actually finds them: RuntimeLoader (Qt
+    // 6.8.5-violoop3) does not carry node names over. For the cue that is
+    // its z, which the model keeps at 12.125 as a marker. Any of them can
+    // stay null: a light without a scope lights everything, and without
+    // the cue the lights sit at the model's normal state.
+    property Model bodyModel: null
+    property Model displayModel: null
+    property Node lightCue: null
+    readonly property real lightPower: lightCue ? lightCue.x : 0.5
+    readonly property real warmth: lightCue ? lightCue.y : 0
+    readonly property color spill: Qt.rgba(0.04 + 0.96 * warmth, 0.84 - 0.58 * warmth, 0.94 - 0.91 * warmth, 1)
+
+    function findRig() {
+        let body = null, display = null, cue = null
+        let bodyGuess = null, displayGuess = null, cueGuess = null
+        function visit(node) {
+            if (node.objectName === "VioLightCue")
+                cue = node
+            if (node instanceof Model) {
+                if (node.objectName === "VIO")
+                    body = node
+                else if (node.objectName === "Display")
+                    display = node
+                if (node.skin) {
+                    const n = node.materials.length
+                    if (n > 1 && (!bodyGuess || n > bodyGuess.materials.length))
+                        bodyGuess = node
+                    else if (n === 1 && !displayGuess && node.materials[0].normalMap)
+                        displayGuess = node
+                }
+            } else if (!cueGuess && node.children.length === 0 && Math.abs(node.z - 12.125) < 0.001) {
+                cueGuess = node
+            }
+            for (let i = 0; i < node.children.length; ++i)
+                visit(node.children[i])
+        }
+        visit(loader)
+        bodyModel = body || bodyGuess
+        displayModel = display || displayGuess
+        lightCue = cue || cueGuess
+        console.log("AwayPage: light rig - body", bodyModel, body ? "(by name)" : "(guessed)",
+                    "display", displayModel, display ? "(by name)" : "(guessed)",
+                    "cue", lightCue, cue ? "(by name)" : "(guessed)", "power", lightPower, "warmth", warmth)
+    }
+
     // Clips (glTF animations) in the loaded model, and the one playing.
     property var clipNames: []
     property string currentClip: ""
 
     // Cross-fade length for clip switches, see TimelineLoopCloser::playClip.
-    readonly property int fadeMs: 250
+    readonly property int fadeMs: 225
 
     // Switches to clip `name` right away, cross-faded from wherever the
     // playing clip is.
@@ -250,7 +304,7 @@ Item {
         anchors.fill: parent
 
         environment: SceneEnvironment {
-            clearColor: "#121212"
+            clearColor: "#000000"
             backgroundMode: SceneEnvironment.Color
             antialiasingMode: SceneEnvironment.MSAA
             antialiasingQuality: SceneEnvironment.High
@@ -277,20 +331,77 @@ Item {
             }
         }
 
-        // Both lights stay fixed in the world (not parented to the camera
+        // The designer's light rig for this model, values as given in
+        // "VIO 灯光与设备接入参数" (2026-11-13): three directional and three
+        // point lights, each scoped to either the shell or the face
+        // (root.bodyModel / root.displayModel), positions in meters. Two
+        // of the point lights follow the model's own lamps in brightness
+        // and color (root.lightPower / root.spill).
+        //
+        // That rig also has three HDR light probes and a glass shader,
+        // which this page does not have yet. Everything outside the two
+        // scoped meshes (props, visor glass, lamps) is meant to be lit by
+        // those probes, so for now it shows by its emissive part only.
+        //
+        // All of them stay fixed in the world (not parented to the camera
         // rig) on purpose: the shading changing as the camera orbits is
         // part of what shows this is a lit 3D scene.
+
+        // Face key.
         DirectionalLight {
-            eulerRotation: Qt.vector3d(-45, 45, 0)
-            brightness: 1.2
+            scope: root.displayModel
+            eulerRotation: Qt.vector3d(-26, 49, 0)
+            color: "#e6e5f3"
+            brightness: 2.75
+            ambientColor: "#0a0c12"
         }
 
-        // Weak fill from roughly the opposite side, so the character's
-        // back isn't near-black once the camera orbits behind the key
-        // light.
+        // Rim on the shell and the round hands.
         DirectionalLight {
-            eulerRotation: Qt.vector3d(-20, -135, 0)
-            brightness: 0.4
+            scope: root.bodyModel
+            eulerRotation: Qt.vector3d(-36, -125, 0)
+            color: "#b7cfea"
+            brightness: 0.30
+        }
+
+        // Face fill from the front.
+        DirectionalLight {
+            scope: root.displayModel
+            eulerRotation: Qt.vector3d(-20, -12, 0)
+            color: "#e8e9f1"
+            brightness: 0.38
+        }
+
+        // Lamp light coming back off the floor.
+        PointLight {
+            scope: root.bodyModel
+            position: Qt.vector3d(-0.44, 0.09, 0.76)
+            color: root.spill
+            brightness: 0.30 + 2.15 * root.lightPower
+            constantFade: 1
+            linearFade: 0
+            quadraticFade: 12
+        }
+
+        // Fill on the round hands and the shell.
+        PointLight {
+            scope: root.bodyModel
+            position: Qt.vector3d(0.67, 0.41, 1.17)
+            color: "#80abc9"
+            brightness: 0.87
+            constantFade: 1
+            linearFade: 0
+            quadraticFade: 6.5
+        }
+
+        // Lamp light coming back inside the visor.
+        PointLight {
+            scope: root.displayModel
+            position: Qt.vector3d(-0.27, 0.68, 0.91)
+            color: root.spill
+            brightness: 0.12 + 0.82 * root.lightPower
+            constantFade: 1
+            quadraticFade: 10
         }
 
         RuntimeLoader {
@@ -299,7 +410,11 @@ Item {
             onStatusChanged: {
                 root.modelMin = Qt.vector3d(0, 0, 0)
                 root.modelMax = Qt.vector3d(0, 0, 0)
+                root.bodyModel = null
+                root.displayModel = null
+                root.lightCue = null
                 if (status === RuntimeLoader.Success) {
+                    root.findRig()
                     timelineLoopCloser.closeLoops(loader)
                     timelineLoopCloser.restoreHolds(loader)
                     root.clipNames = timelineLoopCloser.clipNames(loader)
