@@ -9,6 +9,7 @@
 #include <QSet>
 #include <QUrl>
 #include <QVariant>
+#include <QVector3D>
 
 #include <algorithm>
 
@@ -53,6 +54,18 @@ QList<Clip> findClips(QObject *sceneRoot)
     }
     return clips;
 }
+
+// Same threshold as AwayPage.qml's hideCollapsedNodes(): a node scaled
+// down this far is the model's way of saying "hidden".
+bool isCollapsed(const QVariant &scale)
+{
+    const QVector3D s = scale.value<QVector3D>();
+    return qMax(qAbs(s.x()), qMax(qAbs(s.y()), qAbs(s.z()))) < 0.001f;
+}
+
+// How long (in timeline frames = ms) a hidden<->shown switch may take: far
+// below one display frame, so no rendered frame lands inside it.
+const qreal switchFrames = 0.01;
 
 } // namespace
 
@@ -151,9 +164,19 @@ int TimelineLoopCloser::restoreHolds(QObject *sceneRoot)
         for (const auto &entry : std::as_const(groups)) {
             QQmlListReference keyframes(entry.first, "keyframes");
             const QList<Key> &keys = entry.second;
+            const bool isScale = entry.first->property("property").toString() == QLatin1String("scale");
             for (qsizetype i = 1; i < keys.size(); ++i) {
-                if (keys[i].frame - keys[i - 1].frame < interval * 1.5)
+                // A scale segment with one end collapsed is the model
+                // switching something on or off, not a motion - see the
+                // header. It must not be interpolated at all, whether or
+                // not keys were dropped in it.
+                const bool isSwitch = isScale
+                    && isCollapsed(keys[i - 1].object->property("value"))
+                           != isCollapsed(keys[i].object->property("value"));
+                const qreal gap = keys[i].frame - keys[i - 1].frame;
+                if (!isSwitch && gap < interval * 1.5)
                     continue;
+                const qreal holdFor = isSwitch ? gap - qMin(gap / 2, switchFrames) : gap - interval;
                 QObject *keyframe = keyframeComponent.create();
                 if (!keyframe) {
                     qWarning() << "TimelineLoopCloser: cannot create Keyframe:"
@@ -161,7 +184,7 @@ int TimelineLoopCloser::restoreHolds(QObject *sceneRoot)
                     return inserted;
                 }
                 keyframe->setParent(entry.first);
-                keyframe->setProperty("frame", keys[i].frame - interval);
+                keyframe->setProperty("frame", keys[i - 1].frame + holdFor);
                 keyframe->setProperty("value", keys[i - 1].object->property("value"));
                 keyframes.append(keyframe);
                 ++inserted;

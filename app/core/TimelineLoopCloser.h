@@ -83,6 +83,18 @@ public:
     // hold's end (the earlier key's value, one interval before the later
     // key).
     //
+    // Hidden<->shown switches get stricter treatment. The model swaps
+    // meshes by scaling one node to 1e-5 and another to 1 (its rim light
+    // is 18 lamp meshes, one per brightness level, of which one is shown
+    // at a time), with glTF STEP interpolation and a guard key 2.5ms
+    // before each switch. The importer ignores STEP and drops the guard
+    // key, and re-inserting the hold one sampling interval early still
+    // left a 33ms ramp in which the outgoing and incoming lamps were both
+    // shrunk to nothing-in-particular: the rim light went dark for a
+    // frame or two at every brightness step (seen on dev1's panel as the
+    // light flickering). So any scale segment with exactly one end
+    // collapsed holds until 0.01ms before its end, dropped keys or not.
+    //
     // The sampling interval is inferred as the smallest gap between two
     // keys anywhere in that timeline, which is exact for clips baked at a
     // fixed rate (both models we have: 30 and 24 fps). A clip that mixes
