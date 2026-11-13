@@ -447,7 +447,7 @@ Item {
                     root.framesToMeasure = 600
                 } else if (status === RuntimeLoader.Error) {
                     root.loadState = "error"
-                    console.log("AwayPage: RuntimeLoader failed to load", source, "-", errorString)
+                    console.error("AwayPage: RuntimeLoader failed to load", source, "-", errorString)
                 }
             }
         }
