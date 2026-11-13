@@ -5,9 +5,10 @@
 #include <QTimer>
 
 // CPU load, GPU load and SoC temperature of the machine the app runs on,
-// read once a second straight from the kernel (/proc/stat, the GPU's
-// devfreq node, the thermal zones) - for the readout in the corner of
-// qml/AwayPage.qml, next to the frame rate that page counts itself.
+// and this process's memory, read once a second straight from the kernel
+// (/proc/stat, the GPU's devfreq node, the thermal zones,
+// /proc/self/status) - for the readout in the corner of qml/AwayPage.qml,
+// next to the frame rate that page counts itself, and for PerfRecorder.
 //
 // Only polls while `active` is set, so nothing is read when no page is
 // showing the numbers. A value that can't be read on this machine (no
@@ -22,6 +23,8 @@ class SystemStats : public QObject
     Q_PROPERTY(qreal gpuLoad READ gpuLoad NOTIFY changed)
     // Degrees Celsius, the "soc-thermal" zone.
     Q_PROPERTY(qreal socTemp READ socTemp NOTIFY changed)
+    // Resident memory of this process, kB.
+    Q_PROPERTY(qreal rssKb READ rssKb NOTIFY changed)
 
 public:
     explicit SystemStats(QObject *parent = nullptr);
@@ -31,6 +34,7 @@ public:
     qreal cpuLoad() const { return m_cpuLoad; }
     qreal gpuLoad() const { return m_gpuLoad; }
     qreal socTemp() const { return m_socTemp; }
+    qreal rssKb() const { return m_rssKb; }
 
 signals:
     void activeChanged();
@@ -49,4 +53,5 @@ private:
     qreal m_cpuLoad = -1;
     qreal m_gpuLoad = -1;
     qreal m_socTemp = -1;
+    qreal m_rssKb = -1;
 };

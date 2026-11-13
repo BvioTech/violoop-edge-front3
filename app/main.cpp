@@ -3,6 +3,7 @@
 #include <QQmlContext>
 
 #include "core/NavController.h"
+#include "core/PerfRecorder.h"
 #include "core/RestClient.h"
 #include "core/SseClient.h"
 #include "core/StatusStore.h"
@@ -31,6 +32,7 @@ int main(int argc, char *argv[])
     auto *nav = new NavController(QStringLiteral("HomePage.qml"), &engine);
     auto *timelineLoopCloser = new TimelineLoopCloser(&engine);
     auto *systemStats = new SystemStats(&engine);
+    auto *perfRecorder = new PerfRecorder(systemStats, &engine);
 
     engine.rootContext()->setContextProperty("nav", nav);
     engine.rootContext()->setContextProperty("restClient", rest);
@@ -41,6 +43,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("upgradeStore", upgrade);
     engine.rootContext()->setContextProperty("timelineLoopCloser", timelineLoopCloser);
     engine.rootContext()->setContextProperty("systemStats", systemStats);
+    engine.rootContext()->setContextProperty("perfRecorder", perfRecorder);
 
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed,

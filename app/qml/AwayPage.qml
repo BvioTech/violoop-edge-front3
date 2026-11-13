@@ -527,6 +527,11 @@ Item {
     // them while this page is up). "-" for a value this machine doesn't
     // have. The frame rate drops to 0 while paused with nothing moving:
     // nothing is redrawn then.
+    //
+    // The same numbers are written to a CSV file once a second for as
+    // long as the page is up, for burn-in runs - core/PerfRecorder.h has
+    // the columns and where the file goes. The file's name is shown under
+    // the readout.
     property int framesSwapped: 0
     property real fps: -1
     Connections {
@@ -543,10 +548,15 @@ Item {
             root.fps = root.framesSwapped * 1000 / Math.max(1, now - last)
             root.framesSwapped = 0
             last = now
+            perfRecorder.record(root.fps, root.currentClip, root.paused)
         }
     }
     Binding { target: systemStats; property: "active"; value: true }
-    Component.onDestruction: systemStats.active = false
+    Component.onCompleted: perfRecorder.start()
+    Component.onDestruction: {
+        perfRecorder.stop()
+        systemStats.active = false
+    }
 
     Text {
         anchors.top: hint.bottom
@@ -563,6 +573,8 @@ Item {
               + "\nCPU " + show(systemStats.cpuLoad, 0, "%")
               + "\nGPU " + show(systemStats.gpuLoad, 0, "%")
               + "\nSoC " + show(systemStats.socTemp, 1, "°C")
+              + "\n内存 " + show(systemStats.rssKb / 1024, 0, " MB")
+              + "\n" + (perfRecorder.file ? "记录中 " + perfRecorder.file.split("/").pop() : "未记录")
     }
 
     // Loading / failure notice, see loadState. Text only: the GUI thread

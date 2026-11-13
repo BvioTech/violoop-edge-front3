@@ -98,5 +98,19 @@ void SystemStats::poll()
     const qreal milli = readFirstLine(m_socTempPath).toDouble(&ok);
     m_socTemp = ok ? milli / 1000.0 : -1;
 
+    // "VmRSS:    334268 kB"
+    m_rssKb = -1;
+    QFile status(QStringLiteral("/proc/self/status"));
+    if (status.open(QIODevice::ReadOnly)) {
+        for (QByteArray line = status.readLine(); !line.isEmpty(); line = status.readLine()) {
+            if (line.startsWith("VmRSS:")) {
+                const qreal kb = line.mid(6).simplified().split(' ').value(0).toDouble(&ok);
+                if (ok)
+                    m_rssKb = kb;
+                break;
+            }
+        }
+    }
+
     emit changed();
 }
