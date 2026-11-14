@@ -17,3 +17,9 @@ EDGE_API_BASE=http://127.0.0.1:9090
 # (burn-in on the away page: AwayPage.qml) - see app/main.cpp. Leave unset
 # in normal use.
 #EDGE_KIOSK_OPEN_PAGE=AwayPage.qml
+
+# How the app reaches the screen - see /usr/bin/violoop-edge-kiosk-qt-launch.
+# "wayland" (the default) runs it under weston; "eglfs" runs it straight on
+# KMS with no compositor, which is under evaluation and not yet verified
+# with touch on a real device.
+#EDGE_KIOSK_QPA=eglfs

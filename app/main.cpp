@@ -6,6 +6,7 @@
 #include "core/NavController.h"
 #include "core/PerfRecorder.h"
 #include "core/RestClient.h"
+#include "core/ScreenshotOnSignal.h"
 #include "core/SseClient.h"
 #include "core/StatusStore.h"
 #include "core/SystemStats.h"
@@ -37,6 +38,8 @@ int main(int argc, char *argv[])
     auto *timelineLoopCloser = new TimelineLoopCloser(&engine);
     auto *systemStats = new SystemStats(&engine);
     auto *perfRecorder = new PerfRecorder(systemStats, &engine);
+    // SIGUSR1 saves a picture of the window - see the header.
+    new ScreenshotOnSignal(&engine);
 
     engine.rootContext()->setContextProperty("nav", nav);
     engine.rootContext()->setContextProperty("restClient", rest);

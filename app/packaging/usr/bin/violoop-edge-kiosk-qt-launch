@@ -1,7 +1,7 @@
 #!/bin/bash
-# Production launcher for violoop-edge-kiosk-qt.service - same weston/seat
-# pattern as violoop-edge-front2's packaging/usr/bin/violoop-edge-kiosk-launch
-# and this repo's own app/scripts/launch-under-weston.sh (that one is for
+# Production launcher for violoop-edge-kiosk-qt.service. Its default path
+# (weston) follows the same weston/seat pattern as violoop-edge-front2's
+# packaging/usr/bin/violoop-edge-kiosk-launch and this repo's own app/scripts/launch-under-weston.sh (that one is for
 # ad-hoc dev testing with env-var overrides; this is the fixed-path
 # version that actually ships in the .deb). Requires the invoking
 # systemd unit's PAMName=login + TTYPath=/dev/tty7 for seat/KMS access -
@@ -15,16 +15,49 @@ export LD_LIBRARY_PATH="$QT_PREFIX/lib:${LD_LIBRARY_PATH:-}"
 export QML2_IMPORT_PATH="$QT_PREFIX/qml:${QML2_IMPORT_PATH:-}"
 export QT_PLUGIN_PATH="$QT_PREFIX/plugins:${QT_PLUGIN_PATH:-}"
 
+export QSG_RHI_BACKEND=opengl
+
+RUN_DIR="${RUNTIME_DIRECTORY:-/run/violoop-edge-kiosk-qt}"
+mkdir -p "$RUN_DIR"
+
+# EDGE_KIOSK_QPA (set in /etc/violoop/kiosk-qt) picks how the app reaches
+# the screen: "wayland" (the default) starts weston and runs the app as its
+# one client; "eglfs" runs the app straight on KMS with no compositor. The
+# eglfs path is under evaluation - see app/README.md, "不经 weston（eglfs）".
+QPA="${EDGE_KIOSK_QPA:-wayland}"
+case "$QPA" in
+    wayland|eglfs) ;;
+    *)
+        # <4> is journald's warning level. A typo here should not leave
+        # the kiosk with a black screen, so carry on with the default.
+        echo "<4>violoop-edge-kiosk-qt-launch: unknown EDGE_KIOSK_QPA '$QPA', using wayland" >&2
+        QPA=wayland
+        ;;
+esac
+
+if [ "$QPA" = eglfs ]; then
+    export QT_QPA_PLATFORM=eglfs
+    export QT_QPA_EGLFS_INTEGRATION=eglfs_kms
+    # Without a compositor Qt may draw its own mouse pointer when it finds
+    # a pointer device. This is a touch-only kiosk.
+    export QT_QPA_EGLFS_HIDECURSOR=1
+    # /dev/dri/card0 is rockchip-drm, the device that drives DSI-1;
+    # /dev/dri/card1 is the Mali render node. Left to itself eglfs_kms
+    # picked card1 here and aborted with "no screens available" (see
+    # qt3d-spike/docs/findings.md, "EGLFS QPA"), so name the device.
+    KMS_CONFIG="$RUN_DIR/eglfs_kms.json"
+    printf '{ "device": "/dev/dri/card0" }\n' >"$KMS_CONFIG"
+    export QT_QPA_EGLFS_KMS_CONFIG="$KMS_CONFIG"
+    exec "$BIN"
+fi
+
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export WAYLAND_DISPLAY=wayland-0
 export QT_QPA_PLATFORM=wayland
 export QT_WAYLAND_DISABLE_WINDOWDECORATION=1
-export QSG_RHI_BACKEND=opengl
 
 rm -f "$XDG_RUNTIME_DIR/wayland-0" "$XDG_RUNTIME_DIR/wayland-0.lock"
 
-RUN_DIR="${RUNTIME_DIRECTORY:-/run/violoop-edge-kiosk-qt}"
-mkdir -p "$RUN_DIR"
 # No repaint-window in [core] below, on purpose. The launchers this one
 # descends from set repaint-window=-1, which holds every client on this
 # 60 Hz panel to 30 fps: weston then starts compositing too late for the

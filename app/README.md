@@ -37,6 +37,7 @@ app/
 │                        留作轻量基准。
 ├── scripts/
 │   ├── launch-under-weston.sh   # 开发用，env var 可覆盖路径
+│   ├── launch-eglfs.sh          # 开发用，不经 weston 直接上 KMS（评估中）
 │   └── build-deb.sh              # 打包，见下
 ├── packaging/         # .deb 的 staging 内容
 └── docs/
@@ -55,10 +56,53 @@ QT_QPA_PLATFORM=offscreen timeout 5 ./build/violoop_edge_kiosk_qt
 
 # 真机：临时顶替 violoop-edge-kiosk.service 的 ExecStart
 ./scripts/launch-under-weston.sh
+# 或者不经 weston（见下方"不经 weston（eglfs）"）
+./scripts/launch-eglfs.sh
 ```
 
 链接 `/opt/violoop-qt6`（`violoop-qt6` 包），不是系统 `qt6-*` 包——后者
 在这台设备上有 GLES/ESSL100 版本协商问题。
+
+## 截图
+
+给应用进程发 `SIGUSR1`，它会把自己的窗口存成 PNG（`core/ScreenshotOnSignal`），
+已经转正，不用再旋转：
+
+```bash
+sudo kill -USR1 "$(systemctl show -p MainPID --value violoop-edge-kiosk-qt)"
+# -> /var/lib/violoop-edge-kiosk-qt/screenshot-<日期>-<时间>.png
+#    路径同时记在日志里：journalctl -u violoop-edge-kiosk-qt | grep ScreenshotOnSignal
+```
+
+不要用 `systemctl kill -s USR1`：它会把信号发给服务里的所有进程，包括
+weston，而 weston 没有处理这个信号的理由，很可能直接退出（没有实测）。截图由应用自己完成，不依赖 `weston-screenshooter`，所以在
+eglfs 下也能用。
+
+## 不经 weston（eglfs）
+
+**状态：评估中，默认仍然走 weston。** 开关和脚本已经写好，但真实应用还没有
+在 eglfs 下上过真机。
+
+weston 在这里只服务一个全屏窗口：旋转是 `qml/AppShell.qml` 自己做的，息屏
+靠直接操作背光，面板只有一个固定模式（见"性能标杆"）。去掉它可以少一层
+合成、少一个约 58 MB 的常驻进程和一个包依赖。
+
+打开方式（装好的包）：在 `/etc/violoop/kiosk-qt` 里设
+`EDGE_KIOSK_QPA=eglfs`，然后 `sudo systemctl restart violoop-edge-kiosk-qt`。
+去掉这一行就回到 weston。本地构建用 `scripts/launch-eglfs.sh`。
+
+切换默认值之前要在真机上确认的事，按顺序：
+
+1. 触摸：四角点击、滑动方向、待机页的单指旋转和双指缩放。旋转后的触摸
+   对齐只在 weston 下验证过；eglfs 下是 Qt 自己读输入设备。
+2. 待机页帧率和 GPU 负载，与"性能标杆"里 weston 下的数字对比
+   （`idle.default` 55.0 fps / 79%）。
+3. 应用崩溃到服务重启之间屏幕上显示什么。
+4. 6 小时烤机，与现有基准同条件。
+
+已知的坑：`eglfs_kms` 自己选设备会选到 `/dev/dri/card1`（Mali 渲染节点）
+然后报 "no screens available"，必须指定 `card0`，启动脚本已经处理
+（来历见 `../qt3d-spike/docs/findings.md` 的"EGLFS QPA"一节）。
 
 ## 日志
 
@@ -84,6 +128,12 @@ QT_QPA_PLATFORM=offscreen timeout 5 ./build/violoop_edge_kiosk_qt
 - 设备：dev1，Violoop RK3576 VLA11（8 核，8 GB 内存，Mali GPU），
   面板 1080×1240@60Hz，Qt `6.8.5-violoop3`，weston kiosk-shell
   （`repaint-window` 为默认值，见下）。
+- 面板刷新率固定 60Hz，没有别的档位（2026-11-14 在 dev1 上只读确认）：
+  `/sys/class/drm/card0-DSI-1/modes` 和 weston 启动日志都只有
+  `1080x1240@60.0` 一个模式；面板是 `simple-panel-dsi`，设备树里只有
+  `timing0` 一组时序（像素时钟 84,296,640 Hz，总行列 1108×1268，正好
+  60.000 Hz）；EDID 为空，模式全部来自设备树。是否支持 VRR 没有查
+  （设备上没有 `modetest`）。
 - 模型：`assets/away/VIO_DesktopPet.glb` 减面版（7.5 万面，19 段动画），
   全程播放 `idle.default`。
 - 渲染设置：MSAA High、六盏灯、一张 light probe
