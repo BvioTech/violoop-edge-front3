@@ -39,40 +39,31 @@ Item {
     // rendered live from a rigged 3D model rather than played back from a
     // video (what edge-front2 does), so the viewer can drag to orbit the
     // camera around the character, pinch to zoom, and pause the animation
-    // mid-stride and keep orbiting the frozen pose. The defaults below
-    // reproduce the original fixed camera exactly (position (0, 1.2, 3.5),
-    // pitched -10 degrees): that line of sight crosses the character's
-    // axis (x = z = 0) at y = 1.2 - 3.5 * tan(10deg) ~= 0.58, which is the
-    // orbit pivot, 3.5 / cos(10deg) ~= 3.55 away. Those two numbers were
-    // tuned for CesiumMan and are now only what the camera uses until the
-    // model has loaded; from then on they follow the model's own bounds
-    // (modelMin/modelMax, set on load).
+    // mid-stride and keep orbiting the frozen pose.
+    //
+    // The defaults reproduce the camera the designer set this model up
+    // for (qt/VioPreview.qml in their package): 35 degrees of vertical
+    // field of view, at (0, 1.10, 5.10), pitched -5.7 degrees. That line
+    // of sight crosses the character's axis (x = z = 0) at
+    // y = 1.10 - 5.10 * tan(5.7deg) ~= 0.59, which is the orbit pivot,
+    // 5.10 / cos(5.7deg) ~= 5.125 away. The model itself stands turned by
+    // modelYaw, as in that preview. Zoom is kept within the preview's
+    // range.
     readonly property real defaultYaw: 0
-    readonly property real defaultPitch: -10
+    readonly property real defaultPitch: -5.7
+    readonly property vector3d pivot: Qt.vector3d(0, 0.59, 0)
+    readonly property real defaultDistance: 5.125
+    readonly property real minDistance: 2.75
+    readonly property real maxDistance: 5.5
+    readonly property real modelYaw: -9
+
+    // The loaded model's bounds. Only logged these days (the camera used
+    // to be fitted to them), but measuring them is also how the page
+    // knows the meshes have been through their first frame - see
+    // measureModel().
     property vector3d modelMin: Qt.vector3d(0, 0, 0)
     property vector3d modelMax: Qt.vector3d(0, 0, 0)
-    readonly property vector3d modelSize: modelMax.minus(modelMin)
-    readonly property bool modelMeasured: modelSize.x > 0 && modelSize.y > 0
 
-    // Orbit around the bounds' centre.
-    readonly property vector3d pivot: modelMeasured ? modelMin.plus(modelMax).times(0.5) : Qt.vector3d(0, 0.58, 0)
-
-    // Far enough back that the bounding box takes up about 1/fill of the
-    // view in its tighter direction. The slack is for what the bounds
-    // don't cover - they are the rest pose's, and clips move the character
-    // and bring out props beside and above it. A binding rather than a
-    // one-off calculation because the model can finish loading before the
-    // page has been given its size.
-    readonly property real defaultDistance: {
-        if (!modelMeasured || view.width <= 0 || view.height <= 0)
-            return 3.55
-        const fill = 1.7
-        const tanHalfFov = Math.tan(camera.fieldOfView * Math.PI / 360) // vertical fov
-        const footprint = Math.max(modelSize.x, modelSize.z)
-        const forHeight = modelSize.y / 2 / tanHalfFov
-        const forWidth = footprint / 2 / (tanHalfFov * view.width / view.height)
-        return Math.max(forHeight, forWidth) * fill + footprint / 2
-    }
     property real yaw: defaultYaw
     property real pitch: defaultPitch
     property real distance: defaultDistance
@@ -186,13 +177,14 @@ Item {
         visit(loader)
     }
 
-    // What the lights need from the loaded model (see the lights in the
-    // View3D below): the two meshes they are scoped to, and the node whose
-    // position the clips animate to say how bright and how warm the
-    // model's own lamps currently are.
+    // What the lights and the glass need from the loaded model (see the
+    // lights in the View3D below): the two meshes the lights are scoped
+    // to, the visor glass, and the node whose position the clips animate
+    // to say how bright and how warm the model's own lamps currently are.
     //
     // bodyModel is the multi-material skinned shell ("VIO" in the file),
     // displayModel the inner face with the normal map ("Display"),
+    // glassModel the transparent visor over it ("Window"),
     // lightCue the empty node "VioLightCue", position (power, warmth, _).
     // Looked up by glTF node name, falling back on what the nodes look
     // like - which is what actually finds them: RuntimeLoader (Qt
@@ -200,11 +192,8 @@ Item {
     // its z, which the model keeps at 12.125 as a marker. Any of them can
     // stay null: a light without a scope lights everything, and without
     // the cue the lights sit at the model's normal state.
-    // Brightness of the stand-in light probe. Picked from screenshots on
-    // dev1 against the designer's render: at 1.0 the visor glass turns
-    // milky, well below this the shell goes back to black.
-    readonly property real probeExposure: 0.6
     property Model bodyModel: null
+    property Model glassModel: null
     property Model displayModel: null
     property Node lightCue: null
     readonly property real lightPower: lightCue ? lightCue.x : 0.5
@@ -213,7 +202,7 @@ Item {
 
     function findRig() {
         let body = null, display = null, cue = null
-        let bodyGuess = null, displayGuess = null, cueGuess = null
+        let bodyGuess = null, displayGuess = null, cueGuess = null, glass = null
         function visit(node) {
             if (node.objectName === "VioLightCue")
                 cue = node
@@ -228,6 +217,9 @@ Item {
                         bodyGuess = node
                     else if (n === 1 && !displayGuess && node.materials[0].normalMap)
                         displayGuess = node
+                    else if (n === 1 && !glass && node.materials[0] instanceof PrincipledMaterial
+                             && node.materials[0].alphaMode === PrincipledMaterial.Blend)
+                        glass = node
                 }
             } else if (!cueGuess && node.children.length === 0 && Math.abs(node.z - 12.125) < 0.001) {
                 cueGuess = node
@@ -239,9 +231,26 @@ Item {
         bodyModel = body || bodyGuess
         displayModel = display || displayGuess
         lightCue = cue || cueGuess
+        glassModel = glass
+
+        // The designer's treatment of the face and the visor, as in their
+        // qt/VioModel.qml. The face reflects its own small probe and its
+        // glow turns with the lamps' warmth; the visor's PBR material is
+        // replaced by the glass shader (the material the file carries is
+        // the fallback for viewers without it).
+        if (displayModel) {
+            const face = displayModel.materials[0]
+            face.lightProbe = faceProbe
+            face.emissiveFactor = Qt.binding(function() {
+                return Qt.vector3d(1, 1 - 0.74 * root.warmth, 1 - 0.84 * root.warmth)
+            })
+        }
+        if (glassModel)
+            glassModel.materials = [glassMaterial]
         console.log("AwayPage: light rig - body", bodyModel, body ? "(by name)" : "(guessed)",
                     "display", displayModel, display ? "(by name)" : "(guessed)",
-                    "cue", lightCue, cue ? "(by name)" : "(guessed)", "power", lightPower, "warmth", warmth)
+                    "cue", lightCue, cue ? "(by name)" : "(guessed)", "power", lightPower, "warmth", warmth,
+                    "glass", glassModel)
     }
 
     // Clips (glTF animations) in the loaded model, and the one playing.
@@ -313,13 +322,44 @@ Item {
             backgroundMode: SceneEnvironment.Color
             antialiasingMode: SceneEnvironment.MSAA
             antialiasingQuality: SceneEnvironment.High
-            // What the dark metal shell, the glossy hands, the visor
-            // glass and the props are lit by - see the lights below.
+            // What the dark metal shell, the glossy hands and the props
+            // are lit by - see the lights below.
             lightProbe: Texture {
-                source: Qt.resolvedUrl("../assets/away/studio-probe.hdr")
+                source: Qt.resolvedUrl("../assets/away/visor-studio.hdr")
                 mappingMode: Texture.LightProbe
             }
-            probeExposure: root.probeExposure
+        }
+
+        // The face's own probe, for its soft highlight (set on the face
+        // material in findRig()).
+        Texture {
+            id: faceProbe
+            source: Qt.resolvedUrl("../assets/away/display-studio.hdr")
+            mappingMode: Texture.LightProbe
+        }
+
+        // The visor glass: one transparent draw over the face that
+        // computes its reflection of a studio panorama per pixel
+        // (assets/away/canopy.frag, the designer's shader, unchanged), with
+        // the lamps' light picked up along its lower edge.
+        CustomMaterial {
+            id: glassMaterial
+            property real signalPower: root.lightPower
+            property real signalWarmth: root.warmth
+            property TextureInput reflectionMap: TextureInput {
+                texture: Texture {
+                    source: Qt.resolvedUrl("../assets/away/optical-studio.hdr")
+                    tilingModeHorizontal: Texture.Repeat
+                    tilingModeVertical: Texture.ClampToEdge
+                    generateMipmaps: false
+                }
+            }
+            shadingMode: CustomMaterial.Shaded
+            sourceBlend: CustomMaterial.SrcAlpha
+            destinationBlend: CustomMaterial.OneMinusSrcAlpha
+            cullMode: Material.BackFaceCulling
+            depthDrawMode: Material.NeverDepthDraw
+            fragmentShader: Qt.resolvedUrl("../assets/away/canopy.frag")
         }
 
         // Yaw and pitch on separate nested nodes so the orbit doesn't
@@ -334,11 +374,12 @@ Item {
                 PerspectiveCamera {
                     id: camera
                     z: root.distance
+                    fieldOfView: 35
                     // Default clipNear (10) clips away meter-scale glTF
-                    // content at this camera distance (~3.5) - same fix
+                    // content at this camera distance - same fix
                     // runtime_loader.qml needed, see that file's comment.
-                    clipNear: 0.1
-                    clipFar: 100
+                    clipNear: 0.01
+                    clipFar: 50
                 }
             }
         }
@@ -350,13 +391,11 @@ Item {
         // of the point lights follow the model's own lamps in brightness
         // and color (root.lightPower / root.spill).
         //
-        // That rig also has three HDR light probes and a glass shader,
-        // which this page does not have. Everything outside the two
-        // scoped meshes (props, visor glass, lamps) is meant to be lit by
-        // those probes, and the dark metal shell and the hands show
-        // little without them (on dev1: near black). Until the designer's
-        // HDRs are here, the environment's single stand-in probe
-        // (assets/away/studio-probe.hdr) does that job.
+        // The rest of that rig is above: the environment's light probe,
+        // the face's own probe and the glass shader. Everything outside
+        // the two scoped meshes (props, lamps) is lit by the environment
+        // probe alone, and the dark metal shell and the hands show little
+        // without it (on dev1: near black).
         //
         // All of them stay fixed in the world (not parented to the camera
         // rig) on purpose: the shading changing as the camera orbits is
@@ -421,12 +460,14 @@ Item {
 
         RuntimeLoader {
             id: loader
+            eulerRotation.y: root.modelYaw
             source: root.loadStarted ? root.modelSource : ""
             onStatusChanged: {
                 root.modelMin = Qt.vector3d(0, 0, 0)
                 root.modelMax = Qt.vector3d(0, 0, 0)
                 root.bodyModel = null
                 root.displayModel = null
+                root.glassModel = null
                 root.lightCue = null
                 if (status === RuntimeLoader.Success) {
                     root.findRig()
@@ -498,7 +539,7 @@ Item {
             }
             onActiveScaleChanged: {
                 if (active)
-                    root.distance = Math.max(root.defaultDistance * 0.4, Math.min(root.defaultDistance * 2.5, startDistance / activeScale))
+                    root.distance = Math.max(root.minDistance, Math.min(root.maxDistance, startDistance / activeScale))
             }
         }
     }
