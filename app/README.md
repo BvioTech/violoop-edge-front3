@@ -37,7 +37,7 @@ app/
 │                        留作轻量基准。
 ├── scripts/
 │   ├── launch-under-weston.sh   # 开发用，env var 可覆盖路径
-│   ├── launch-eglfs.sh          # 开发用，不经 weston 直接上 KMS（评估中）
+│   ├── launch-eglfs.sh          # 开发用，不经 weston 直接上 KMS（对比用）
 │   └── build-deb.sh              # 打包，见下
 ├── packaging/         # .deb 的 staging 内容
 └── docs/
@@ -80,25 +80,46 @@ eglfs 下也能用。
 
 ## 不经 weston（eglfs）
 
-**状态：评估中，默认仍然走 weston。** 开关和脚本已经写好，但真实应用还没有
-在 eglfs 下上过真机。
+**结论（2026-11-14，dev1 实测）：能跑，但待机页慢约 20%，默认继续走 weston。**
+开关和脚本留着，供以后换驱动或换场景时重测。
 
 weston 在这里只服务一个全屏窗口：旋转是 `qml/AppShell.qml` 自己做的，息屏
-靠直接操作背光，面板只有一个固定模式（见"性能标杆"）。去掉它可以少一层
-合成、少一个约 58 MB 的常驻进程和一个包依赖。
+靠直接操作背光，面板只有一个固定模式（见"性能标杆"）。去掉它可以少一个
+约 58 MB 的常驻进程和一个包依赖，这是当初想去掉它的理由。
 
 打开方式（装好的包）：在 `/etc/violoop/kiosk-qt` 里设
 `EDGE_KIOSK_QPA=eglfs`，然后 `sudo systemctl restart violoop-edge-kiosk-qt`。
 去掉这一行就回到 weston。本地构建用 `scripts/launch-eglfs.sh`。
 
-切换默认值之前要在真机上确认的事，按顺序：
+**实测**
 
-1. 触摸：四角点击、滑动方向、待机页的单指旋转和双指缩放。旋转后的触摸
-   对齐只在 weston 下验证过；eglfs 下是 Qt 自己读输入设备。
-2. 待机页帧率和 GPU 负载，与"性能标杆"里 weston 下的数字对比
-   （`idle.default` 55.0 fps / 79%）。
-3. 应用崩溃到服务重启之间屏幕上显示什么。
-4. 6 小时烤机，与现有基准同条件。
+同一个二进制（提交 `1ea67a0`）、同一场景（待机页 `idle.default`，MSAA High +
+probe），只换启动脚本，各跑约 1 分钟：
+
+| | 帧率（平均 / 最低） | GPU 负载 | 每帧周期 | 其中 swap |
+| --- | --- | --- | --- | --- |
+| weston | 56.1 / 48.8 fps | 80% | 17.1 ms | 13.9 ms |
+| eglfs | 44.0 / 39.8 fps | 65% | 21.8 ms | 18.8 ms |
+| eglfs + `QT_QPA_EGLFS_KMS_ATOMIC=1` | 约 46 fps | - | 21.3 ms | 18.5 ms |
+
+- eglfs 下画面正确，应用自己拿到 DSI-1，libinput 认出了触摸屏
+  （`focaltech_ft3519`），`SIGUSR1` 截图可用。触摸对齐和手势没有用手测。
+- 慢不是因为算力不够：GPU 已在最高频（900 MHz）而负载只有 65%，CPU 也有
+  余量。每帧渲染提交只要约 2 ms，时间花在 swap 上。
+- 推断的原因（没有工具直接证实，设备上没有 strace/perf）：libmali 的 GBM
+  平台上 `eglSwapBuffers` 要等 GPU 把这一帧画完才返回，CPU 准备下一帧和
+  GPU 画这一帧不能并行，每帧约 8 ms CPU + 14 ms GPU 串行成 22 ms；Wayland
+  平台不等，两者重叠，周期就是 GPU 的约 17 ms。依据：在渲染后立刻
+  `glFlush` 让 GPU 提前开工，总周期不变（22.3 ms），只是时间从 swap 挪到了
+  render（render 2 → 8 ms，swap 19 → 13 ms，且 swap 集中在 13 ms）。
+- 所以这是驱动（`libmali-bifrost-g52-g24p0-x11-wayland-gbm` 1.9-3）的行为，
+  不是 Qt 的参数能调的；没有在 libmali 里找到相关开关。
+- 轻场景不受影响：`qt3d-spike` 的旋转立方体在 eglfs 下是 59–60 fps。GPU
+  时间接近或超过一帧的场景才会吃这个亏。
+
+逐帧耗时的取法：给服务加
+`Environment="QT_LOGGING_RULES=qt.scenegraph.time.renderloop=true"`，开发用的
+两个启动脚本都会沿用它，日志在 `$RUNTIME_DIRECTORY/app.log`。
 
 已知的坑：`eglfs_kms` 自己选设备会选到 `/dev/dri/card1`（Mali 渲染节点）
 然后报 "no screens available"，必须指定 `card0`，启动脚本已经处理
@@ -132,8 +153,9 @@ weston 在这里只服务一个全屏窗口：旋转是 `qml/AppShell.qml` 自�
   `/sys/class/drm/card0-DSI-1/modes` 和 weston 启动日志都只有
   `1080x1240@60.0` 一个模式；面板是 `simple-panel-dsi`，设备树里只有
   `timing0` 一组时序（像素时钟 84,296,640 Hz，总行列 1108×1268，正好
-  60.000 Hz）；EDID 为空，模式全部来自设备树。是否支持 VRR 没有查
-  （设备上没有 `modetest`）。
+  60.000 Hz）；EDID 为空，模式全部来自设备树。CRTC 上有
+  `variable refresh rate` 等属性（eglfs 的日志里列出，值为 0，即未启用），
+  没有试过打开。
 - 模型：`assets/away/VIO_DesktopPet.glb` 减面版（7.5 万面，19 段动画），
   全程播放 `idle.default`。
 - 渲染设置：MSAA High、六盏灯、一张 light probe

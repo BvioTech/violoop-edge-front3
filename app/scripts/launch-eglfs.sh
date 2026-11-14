@@ -22,7 +22,7 @@ export QT_QPA_PLATFORM=eglfs
 export QT_QPA_EGLFS_INTEGRATION=eglfs_kms
 export QT_QPA_EGLFS_HIDECURSOR=1
 export QSG_RHI_BACKEND=opengl
-export QT_LOGGING_RULES="qt.qpa.*=true;qt.scenegraph.general=true"
+export QT_LOGGING_RULES="${QT_LOGGING_RULES:-qt.qpa.*=true;qt.scenegraph.general=true}"
 
 RUN_DIR="${RUNTIME_DIRECTORY:-/tmp/violoop-edge-kiosk}"
 mkdir -p "$RUN_DIR"

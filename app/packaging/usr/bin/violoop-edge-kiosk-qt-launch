@@ -22,8 +22,10 @@ mkdir -p "$RUN_DIR"
 
 # EDGE_KIOSK_QPA (set in /etc/violoop/kiosk-qt) picks how the app reaches
 # the screen: "wayland" (the default) starts weston and runs the app as its
-# one client; "eglfs" runs the app straight on KMS with no compositor. The
-# eglfs path is under evaluation - see app/README.md, "不经 weston（eglfs）".
+# one client; "eglfs" runs the app straight on KMS with no compositor.
+# eglfs works but ran the away page about 20% slower on dev1 (44 fps
+# against 56), so weston stays the default - see app/README.md,
+# "不经 weston（eglfs）".
 QPA="${EDGE_KIOSK_QPA:-wayland}"
 case "$QPA" in
     wayland|eglfs) ;;

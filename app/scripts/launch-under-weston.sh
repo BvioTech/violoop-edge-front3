@@ -24,7 +24,7 @@ export WAYLAND_DISPLAY=wayland-0
 export QT_QPA_PLATFORM=wayland
 export QT_WAYLAND_DISABLE_WINDOWDECORATION=1
 export QSG_RHI_BACKEND=opengl
-export QT_LOGGING_RULES="qt.qpa.*=true;qt.scenegraph.general=true"
+export QT_LOGGING_RULES="${QT_LOGGING_RULES:-qt.qpa.*=true;qt.scenegraph.general=true}"
 
 rm -f "$XDG_RUNTIME_DIR/wayland-0" "$XDG_RUNTIME_DIR/wayland-0.lock"
 
