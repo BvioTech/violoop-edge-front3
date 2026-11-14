@@ -160,10 +160,11 @@ Item {
 
     // Stops drawing nodes that the model has scaled down to nothing.
     // glTF can't animate visibility, so this model hides whatever a clip
-    // doesn't use by parking it at scale 1e-5 - the props, and 17 of its
-    // 18 lamp meshes at any one time, which is 229k of its 382k triangles.
-    // Quick3D still pushes all of that through the GPU every frame (dev1,
-    // default view, rendered offscreen and uncapped: 34 fps with them, 47
+    // doesn't use by parking it at scale 1e-5 - the props, and all but
+    // one of its lamp meshes at any one time. Quick3D still pushes all of
+    // that through the GPU every frame (measured on dev1 with the model's
+    // first, heavier version, where that was 229k of 382k triangles:
+    // default view, rendered offscreen and uncapped, 34 fps with them, 47
     // without). So `visible` follows the scale for every
     // node that has meshes under it, switching back on the moment a clip
     // scales the node up again.
