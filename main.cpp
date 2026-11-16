@@ -11,6 +11,7 @@
 #include "src/ClipPlayer.h"
 #include "src/JournalLog.h"
 #include "src/MascotDirector.h"
+#include "src/MascotInputs.h"
 #include "src/NavController.h"
 #include "src/PerfRecorder.h"
 #include "src/RestClient.h"
@@ -73,6 +74,24 @@ int main(int argc, char *argv[])
     if (manifest.isEmpty())
         qWarning() << "main: cannot read the mascot's action manifest" << manifestFile.fileName();
     auto *mascot = new MascotDirector(manifest, &engine);
+    // What the backend knows, turned into the director's conditions, see
+    // MascotInputs.h.
+    auto *mascotInputs = new MascotInputs(mascot, 5000, &engine);
+    QObject::connect(status, &StatusStore::connectivityChanged, mascotInputs,
+                     [mascotInputs, status]() { mascotInputs->connectivityProbed(status->connectivityOk()); });
+    QObject::connect(sse, &SseClient::connected, mascotInputs, &MascotInputs::eventsConnected);
+    QObject::connect(sse, &SseClient::eventReceived, mascotInputs, &MascotInputs::eventReceived);
+    QObject::connect(mascotInputs, &MascotInputs::authorizationStatusWanted, rest,
+                     [rest]() { rest->get(MascotInputs::authorizationStatusPath()); });
+    QObject::connect(rest, &RestClient::requestSucceeded, mascotInputs,
+                     [mascotInputs](const QString &path, int statusCode, const QString &body) {
+                         if (path == MascotInputs::authorizationStatusPath())
+                             mascotInputs->authorizationStatusReceived(statusCode, body);
+                     });
+    QObject::connect(rest, &RestClient::requestFailed, mascotInputs, [mascotInputs](const QString &path) {
+        if (path == MascotInputs::authorizationStatusPath())
+            mascotInputs->authorizationStatusReceived(0, QString());
+    });
     // SIGUSR1 saves a picture of the window, SIGUSR2 starts or stops the
     // away page's performance recording - see UnixSignalWatcher.h.
     auto *signalWatcher = new UnixSignalWatcher(&engine);
