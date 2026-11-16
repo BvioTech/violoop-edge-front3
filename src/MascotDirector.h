@@ -46,8 +46,9 @@ class MascotDirector : public QObject
 public:
     // In order of precedence, highest first.
     enum Condition {
-        // Somebody picked a clip by hand (the home page's buttons); the
-        // context is the clip's name. It loops, whatever its kind.
+        // Somebody picked a clip by hand (no page offers that at the
+        // moment); the context is the clip's name. It loops, whatever
+        // its kind.
         Manual,
         Offline,
         Error,
