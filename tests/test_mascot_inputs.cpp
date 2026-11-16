@@ -111,6 +111,7 @@ private slots:
     {
         Fixture f;
         f.authorizationEvent("open");
+        f.authorization(200, pending());
         // The button is no longer armed, the request still waits.
         f.authorizationEvent("resolved", "paused");
         f.authorization(200, pending());
@@ -187,7 +188,7 @@ private slots:
         // The snapshot never celebrates.
         f.inputs.snapshotReceived(MascotInputs::goalPath(), 200, R"({"active":null})");
         QCOMPARE(f.clip(), QString("rest"));
-        QCOMPARE(f.played.size(), 4);
+        QCOMPARE(f.played.size(), 5);   // rest, type, rest, done, rest
     }
 
     void lostDoneIsMadeUpForByTheSnapshot()
@@ -209,10 +210,10 @@ private slots:
         QCOMPARE(f.clip(), QString("done"));
         QTRY_COMPARE(f.clip(), QString("rest"));
         snapshot("null", done2);
-        QCOMPARE(f.played.size(), 4);
+        QCOMPARE(f.played.size(), 5);
         // A cancelled goal is remembered, not celebrated.
         snapshot("null", R"({"goalId":"g3","state":"cancelled","time":300})");
-        QCOMPARE(f.played.size(), 4);
+        QCOMPARE(f.played.size(), 5);
     }
 
     void doneEventAndSnapshotCelebrateOnce()
@@ -242,6 +243,66 @@ private slots:
         f.inputs.eventReceived("goal.state",
             R"({"goalId":"g2","state":"done","active":null,"last":{"goalId":"g2","state":"done","time":200}})");
         QCOMPARE(f.clip(), QString("done"));
+    }
+
+    void staleAnswerIsNotUsed()
+    {
+        Fixture f;
+        f.inputs.eventsConnected();
+        // The event overtakes the answer to the request just made.
+        f.goalEvent("working", working("g1"));
+        f.inputs.snapshotReceived(MascotInputs::goalPath(), 200, R"({"active":null,"last":null})");
+        QCOMPARE(f.clip(), QString("type"));
+        // Asked again, and that answer counts.
+        QCOMPARE(f.asked(MascotInputs::goalPath()), 2);
+        f.inputs.snapshotReceived(MascotInputs::goalPath(), 200, R"({"active":null,"last":null})");
+        QCOMPARE(f.clip(), QString("rest"));
+    }
+
+    void lateAnswerDoesNotCelebrateAgain()
+    {
+        Fixture f;
+        const QString doneZ = R"({"goalId":"z","state":"done","time":50})";
+        const QString doneA = R"({"goalId":"a","state":"done","time":100})";
+        f.inputs.snapshotReceived(MascotInputs::goalPath(), 200,
+                                  QStringLiteral(R"({"active":null,"last":%1})").arg(doneZ));
+        f.inputs.eventReceived("goal.state", QStringLiteral(
+            R"({"goalId":"a","state":"done","active":null,"last":%1})").arg(doneA));
+        QTRY_COMPARE(f.clip(), QString("rest"));
+        QCOMPARE(f.played.size(), 3);
+        // An answer from before that event, still naming the one before.
+        f.inputs.snapshotReceived(MascotInputs::goalPath(), 200,
+                                  QStringLiteral(R"({"active":null,"last":%1})").arg(doneZ));
+        f.inputs.eventReceived("goal.state", QStringLiteral(
+            R"({"goalId":"b","state":"cancelled","active":null,"last":%1})").arg(doneA));
+        QCOMPARE(f.played.size(), 3);
+    }
+
+    void confettiOwedIsThrownLater()
+    {
+        Fixture f;
+        f.inputs.setCelebrationRetry(2000, 20);
+        f.inputs.eventReceived("realtime:state", R"({"state":"listening"})");
+        f.goalEvent("done", "null");
+        QCOMPARE(f.clip(), QString("wait"));
+        f.inputs.eventReceived("realtime:state", R"({"state":"ended"})");
+        QTRY_COMPARE(f.clip(), QString("done"));
+        QTRY_COMPARE(f.clip(), QString("rest"));
+        QTest::qWait(100);
+        QCOMPARE(f.clip(), QString("rest"));   // and only once
+    }
+
+    void confettiOwedExpires()
+    {
+        Fixture f;
+        f.inputs.setCelebrationRetry(60, 20);
+        f.inputs.eventReceived("realtime:state", R"({"state":"listening"})");
+        f.goalEvent("done", "null");
+        QTest::qWait(150);
+        f.inputs.eventReceived("realtime:state", R"({"state":"ended"})");
+        QTest::qWait(100);
+        QCOMPARE(f.clip(), QString("rest"));
+        QCOMPARE(f.played.size(), 3);
     }
 
     void doneWithTheNextGoalAlreadyRunning()

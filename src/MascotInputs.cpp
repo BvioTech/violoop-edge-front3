@@ -16,12 +16,34 @@ MascotInputs::MascotInputs(MascotDirector *director, int pollMs, QObject *parent
     m_poll.setInterval(pollMs);
     connect(&m_poll, &QTimer::timeout, this, [this]() {
         if (m_waiting)
-            emit snapshotWanted(authorizationPath());
+            ask(authorizationPath());
         if (m_goalActive)
-            emit snapshotWanted(goalPath());
+            ask(goalPath());
         if (m_conversing)
-            emit snapshotWanted(conversationPath());
+            ask(conversationPath());
     });
+    m_celebrationRetry.setInterval(1000);
+    connect(&m_celebrationRetry, &QTimer::timeout, this, [this]() { celebrate(false); });
+}
+
+void MascotInputs::setCelebrationRetry(int forMs, int everyMs)
+{
+    m_celebrationForMs = forMs;
+    m_celebrationRetry.setInterval(everyMs);
+}
+
+void MascotInputs::ask(const QString &path)
+{
+    ++m_asked[path];
+    emit snapshotWanted(path);
+}
+
+// An event about what the snapshot at `path` shows: whatever answers are
+// still on their way are older than it.
+void MascotInputs::overtaken(const QString &path)
+{
+    if (m_asked.value(path) > 0)
+        m_overtaken.insert(path);
 }
 
 void MascotInputs::connectivityProbed(bool ok)
@@ -38,9 +60,9 @@ void MascotInputs::connectivityProbed(bool ok)
 void MascotInputs::eventsConnected()
 {
     // Whatever happened while the stream was down was not replayed.
-    emit snapshotWanted(authorizationPath());
-    emit snapshotWanted(goalPath());
-    emit snapshotWanted(conversationPath());
+    ask(authorizationPath());
+    ask(goalPath());
+    ask(conversationPath());
 }
 
 void MascotInputs::eventReceived(const QString &type, const QString &data)
@@ -51,35 +73,53 @@ void MascotInputs::eventReceived(const QString &type, const QString &data)
             return;
         // A new request shows at once; anything else, and also whether
         // the new one is still there, is for the snapshot to say.
+        overtaken(authorizationPath());
         if (event.value(QLatin1String("state")).toString() == QLatin1String("open"))
             setWaiting(true, event.value(QLatin1String("notifId")).toString());
-        emit snapshotWanted(authorizationPath());
+        ask(authorizationPath());
     } else if (type == QLatin1String("goal.state")) {
         const QJsonObject event = QJsonDocument::fromJson(data.toUtf8()).object();
         if (event.isEmpty())
             return;
+        overtaken(goalPath());
         const bool done = event.value(QLatin1String("state")).toString() == QLatin1String("done");
         // Before the first snapshot there is nothing to compare `last`
         // with: then only a `done` event is known to be news. (And a
         // violoop-edge that does not send `last` yet has only the event.)
         const bool known = m_lastGoalKnown;
-        bool celebrate = noteLastGoal(event.value(QLatin1String("last")).toObject());
+        bool news = noteLastGoal(event.value(QLatin1String("last")).toObject());
         if (!known || !event.contains(QLatin1String("last")))
-            celebrate = done;
-        // The cue first: it ends the goal that was being shown, and what
-        // `active` says then only takes over once the confetti is down.
-        if (celebrate)
-            m_director->cue(MascotDirector::Done);
+            news = done;
+        // `active` first: with another goal running already, the director
+        // then knows that it is not that one which is done.
         setGoal(event.value(QLatin1String("active")).toObject());
+        if (news)
+            celebrate(true);
     } else if (type == QLatin1String("realtime:state")) {
         const QJsonObject event = QJsonDocument::fromJson(data.toUtf8()).object();
-        if (!event.isEmpty())
-            setConversation(event.value(QLatin1String("state")).toString());
+        if (event.isEmpty())
+            return;
+        overtaken(conversationPath());
+        setConversation(event.value(QLatin1String("state")).toString());
     }
 }
 
 void MascotInputs::snapshotReceived(const QString &path, int statusCode, const QString &body)
 {
+    if (path != authorizationPath() && path != goalPath() && path != conversationPath())
+        return;
+    if (m_asked[path] > 0)
+        --m_asked[path];
+    if (m_overtaken.contains(path)) {
+        // Older than what an event has said since. Once the last such
+        // answer is in, ask afresh.
+        if (m_asked[path] == 0) {
+            m_overtaken.remove(path);
+            ask(path);
+        }
+        return;
+    }
+
     // No answer, or an error (503 while violoop-edge starts): it is down
     // or was restarted, and neither its authorization requests nor its
     // goals nor a voice session survive that.
@@ -97,9 +137,10 @@ void MascotInputs::snapshotReceived(const QString &path, int statusCode, const Q
     else if (path == goalPath()) {
         // The first snapshot only says where things stand.
         const bool known = m_lastGoalKnown;
-        if (statusCode == 200 && noteLastGoal(reply.value(QLatin1String("last")).toObject()) && known)
-            m_director->cue(MascotDirector::Done);
+        const bool news = statusCode == 200 && noteLastGoal(reply.value(QLatin1String("last")).toObject());
         setGoal(active);
+        if (news && known)
+            celebrate(true);
     }
 }
 
@@ -134,36 +175,10 @@ void MascotInputs::setGoal(const QJsonObject &active)
 
 // `state`: a phase of violoop-edge's realtime voice session, or empty or
 // "ended" for none.
-void MascotInputs::pinConversation(const QString &state)
-{
-    m_conversationPinned = false;
-    setConversation(state);
-    m_conversationPinned = true;
-    m_conversing = false; // nothing to ask the backend about
-    updatePoll();
-}
-
-void MascotInputs::setConversation(const QString &state)
-{
-    if (m_conversationPinned)
-        return;
-    m_conversing = !state.isEmpty() && state != QLatin1String("ended");
-    if (!m_conversing) {
-        m_director->clear(MascotDirector::Conversation);
-    } else {
-        QString phase = QStringLiteral("preparing");
-        if (state == QLatin1String("listening") || state == QLatin1String("speaking"))
-            phase = state;
-        else if (state == QLatin1String("thinking") || state == QLatin1String("working"))
-            phase = QStringLiteral("thinking");
-        m_director->set(MascotDirector::Conversation, phase);
-    }
-    updatePoll();
-}
-
 // `last`: as in GET /status/goal - empty, or the goal that ended last.
 // Remembers it; true when it is one that was completed and that has not
-// been seen before.
+// been seen before. (More than one is remembered: an answer that is late
+// can still name the one before.)
 bool MascotInputs::noteLastGoal(const QJsonObject &last)
 {
     m_lastGoalKnown = true;
@@ -171,10 +186,59 @@ bool MascotInputs::noteLastGoal(const QJsonObject &last)
         return false;
     const QString key = last.value(QLatin1String("goalId")).toString() + QLatin1Char('\n')
         + QString::number(last.value(QLatin1String("time")).toDouble(), 'f', 0);
-    if (key == m_lastGoal)
+    if (m_endedGoals.contains(key))
         return false;
-    m_lastGoal = key;
+    m_endedGoals.append(key);
+    if (m_endedGoals.size() > 16)
+        m_endedGoals.removeFirst();
     return last.value(QLatin1String("state")).toString() == QLatin1String("done");
+}
+
+// Throws the confetti, or keeps offering it for a while when the director
+// has no use for it right now. `fresh`: for a goal just completed, as
+// opposed to offering again what is still owed.
+void MascotInputs::celebrate(bool fresh)
+{
+    if (fresh)
+        m_celebrationDeadline.setRemainingTime(m_celebrationForMs);
+    if (m_director->cue(MascotDirector::Done) || m_celebrationDeadline.hasExpired())
+        m_celebrationRetry.stop();
+    else if (!m_celebrationRetry.isActive())
+        m_celebrationRetry.start();
+}
+
+void MascotInputs::pinConversation(const QString &state)
+{
+    m_conversationPinned = true;
+    m_conversing = false; // nothing to ask the backend about
+    showConversation(state);
+    updatePoll();
+}
+
+// `state`: a phase of violoop-edge's realtime voice session, or empty or
+// "ended" for none.
+void MascotInputs::setConversation(const QString &state)
+{
+    if (m_conversationPinned)
+        return;
+    m_conversing = !state.isEmpty() && state != QLatin1String("ended");
+    showConversation(state);
+    updatePoll();
+}
+
+void MascotInputs::showConversation(const QString &state)
+{
+    if (state.isEmpty() || state == QLatin1String("ended")) {
+        m_director->clear(MascotDirector::Conversation);
+        return;
+    }
+    // A phase this does not know is shown like the start of a session.
+    QString phase = QStringLiteral("preparing");
+    if (state == QLatin1String("listening") || state == QLatin1String("speaking"))
+        phase = state;
+    else if (state == QLatin1String("thinking") || state == QLatin1String("working"))
+        phase = QStringLiteral("thinking");
+    m_director->set(MascotDirector::Conversation, phase);
 }
 
 void MascotInputs::updatePoll()

@@ -30,7 +30,7 @@ Item {
     }
 
     // The director times the clips itself, so it has to know when there
-    // is something on screen to time, and when that is frozen. On stage:
+    // is something on screen to time. On stage:
     // the model is loaded and this page is the one showing.
     readonly property bool onStage: visible && scene.loadState === "ready"
     property bool welcomed: false
@@ -56,7 +56,6 @@ Item {
     }
     Connections {
         target: scene.clips
-        function onPausedChanged() { mascot.stagePaused(scene.clips.paused) }
         // A model that finishes loading while this page is hidden starts
         // its first clip all the same (ClipPlayer::attach).
         function onClipNamesChanged() {

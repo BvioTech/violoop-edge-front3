@@ -81,7 +81,8 @@ public:
         Welcome,
         // Plays in full. Dropped while something above Working is set
         // (no celebrating while offline or in a conversation). Ends the
-        // current goal.
+        // goal that was being worked on, unless Working is set (again):
+        // then it is another goal that is done.
         Done,
         // Only while idle; play in full.
         TouchLeft,
@@ -95,17 +96,15 @@ public:
 
     Q_INVOKABLE void set(MascotDirector::Condition condition, const QString &context = QString());
     Q_INVOKABLE void clear(MascotDirector::Condition condition);
-    Q_INVOKABLE void cue(MascotDirector::Cue cue);
+    // False when the cue was dropped: nobody watching, a clip playing
+    // that is not to be cut short, or a condition in the way.
+    Q_INVOKABLE bool cue(MascotDirector::Cue cue);
 
     // The page that shows the mascot reports in: the loaded model's clips
     // in file order and their lengths in milliseconds. The current
     // decision is sent out again, from the start.
     Q_INVOKABLE void stageAttached(const QStringList &clips, const QVariantList &durationsMs);
     Q_INVOKABLE void stageDetached();
-    // The page froze or unfroze the playing clip; the director's clock
-    // stops and resumes with it.
-    Q_INVOKABLE void stagePaused(bool paused);
-
     // Picks one of n idle interludes, returning 0..n-1. Random by
     // default; tests put in something predictable.
     void setPicker(std::function<int(int)> picker) { m_picker = std::move(picker); }
@@ -173,9 +172,5 @@ private:
     int m_workCursor = 0;
 
     QTimer m_timer;
-    bool m_paused = false;
-    // Left on the clock when the stage was paused, -1 when not paused or
-    // nothing was being timed.
-    int m_pausedRemaining = -1;
     std::function<int(int)> m_picker;
 };

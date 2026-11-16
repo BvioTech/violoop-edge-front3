@@ -217,6 +217,42 @@ private slots:
         QCOMPARE(f.played(), QStringList({ "rest", "type", "read", "wait", "read" }));
     }
 
+    void thinkingWithoutAGoalUsesTheNextGoalsClip()
+    {
+        Fixture f;
+        f.attach();
+        f.director.set(MascotDirector::Working, "goal-1");
+        f.director.clear(MascotDirector::Working);
+        f.director.set(MascotDirector::Conversation, "thinking");
+        // The thinking turns into a goal: nothing changes.
+        f.director.set(MascotDirector::Working, "goal-2");
+        f.director.clear(MascotDirector::Conversation);
+        QCOMPARE(f.played(), QStringList({ "rest", "type", "rest", "read" }));
+    }
+
+    void doneWhileAnotherGoalRuns()
+    {
+        Fixture f;
+        f.attach();
+        f.director.set(MascotDirector::Working, "goal-1");
+        f.director.set(MascotDirector::Working, "goal-2");
+        QVERIFY(f.director.cue(MascotDirector::Done));
+        // goal-2 keeps its clip.
+        QTRY_COMPARE(f.played(), QStringList({ "rest", "type", "read", "done!", "read" }));
+    }
+
+    void droppedCuesSaySo()
+    {
+        Fixture f;
+        QVERIFY(!f.director.cue(MascotDirector::Done));   // nobody watching
+        f.attach();
+        QVERIFY(f.director.cue(MascotDirector::TouchLeft));
+        QVERIFY(!f.director.cue(MascotDirector::Done));   // the touch plays in full
+        f.director.set(MascotDirector::Offline);
+        QTRY_COMPARE(f.played().last(), QString("offline"));
+        QVERIFY(!f.director.cue(MascotDirector::Done));
+    }
+
     void noTouchesInAConversation()
     {
         Fixture f;
@@ -274,31 +310,6 @@ private slots:
         f.director.stageDetached();
         QTest::qWait(clipMs * 3);
         QCOMPARE(f.played(), QStringList({ "rest" }));
-    }
-
-    void pausedStageStopsTheClock()
-    {
-        Fixture f;
-        f.attach();
-        f.director.stagePaused(true);
-        QTest::qWait(clipMs * 3);
-        QCOMPARE(f.played(), QStringList({ "rest" }));
-        f.director.stagePaused(false);
-        QTRY_COMPARE(f.played().mid(0, 2), QStringList({ "rest", "play" }));
-    }
-
-    void manualRestThenIdleRestartsThePausedClip()
-    {
-        // The resting clip, picked by hand (it just carries on) and
-        // paused. Handing the choice back asks for the same clip again,
-        // but this time it must be sent out: that is what takes the stage
-        // out of pause and starts the round.
-        Fixture f;
-        f.attach();
-        f.director.set(MascotDirector::Manual, "rest");
-        f.director.stagePaused(true);
-        f.director.clear(MascotDirector::Manual);
-        QCOMPARE(f.played(), QStringList({ "rest", "rest" }));
     }
 
     void posesAreNotTimedByTheirLength()

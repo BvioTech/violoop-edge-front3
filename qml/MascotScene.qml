@@ -35,35 +35,28 @@ import EdgeFrontQt.Core
 View3D {
     id: scene
 
-    // Orbit camera: yaw, pitch and distance say where the camera is on a
-    // sphere around `pivot`. Whoever uses the scene may move them; the
-    // home page leaves them at the defaults.
+    // The camera: yaw, pitch and distance say where it is on a sphere
+    // around `pivot`. Fixed.
     //
-    // The defaults reproduce the camera the designer first set this
+    // They reproduce the camera the designer first set this
     // model up for (qt/VioPreview.qml in their 2026-11-13 package): 35
     // degrees of vertical field of view, at (0, 1.10, 5.10), pitched -5.7
     // degrees. That line of sight crosses the character's axis
     // (x = z = 0) at y = 1.10 - 5.10 * tan(5.7deg) ~= 0.59, which is the
     // orbit pivot, 5.10 / cos(5.7deg) ~= 5.125 away. The model itself
     // stands turned by modelYaw, as in their preview (the 2026-11-15
-    // one). minDistance..maxDistance is the preview's zoom range.
+    // one).
     //
     // That 2026-11-15 preview also moved the camera in to 3.85. Not
     // followed: on this panel it puts the laptop and the mug of the
     // "working" clip off the bottom and right edges, and the character
     // covering that much more of the screen costs a quarter of the frame
     // rate (dev1: idle.default 42 fps against 56, working 41 against 56).
-    readonly property real defaultYaw: 0
-    readonly property real defaultPitch: -5.7
+    readonly property real yaw: 0
+    readonly property real pitch: -5.7
     readonly property vector3d pivot: Qt.vector3d(0, 0.59, 0)
-    readonly property real defaultDistance: 5.125
-    readonly property real minDistance: 2.75
-    readonly property real maxDistance: 5.5
+    readonly property real distance: 5.125
     readonly property real modelYaw: 14
-
-    property real yaw: defaultYaw
-    property real pitch: defaultPitch
-    property real distance: defaultDistance
 
     // The model to show. A property so that a different file can be put
     // in without editing the loader (the user-supplied-model feature in
@@ -147,7 +140,8 @@ View3D {
                 const lamp = scene.lampKind(node)
                 const update = function() {
                     const s = node.scale
-                    node.visible = !(lamp && scene.steadyLamp)
+                    // (Only with a cyan lamp to show instead.)
+                    node.visible = !(lamp && scene.steadyLamp && scene.steadyLampHolder)
                         && Math.max(Math.abs(s.x), Math.abs(s.y), Math.abs(s.z)) > 0.001
                 }
                 node.scaleChanged.connect(update)
@@ -324,7 +318,7 @@ View3D {
     }
 
     // The loaded model's animation clips: clips.clipNames,
-    // clips.currentClip, clips.paused, clips.play(name, loop, fadeMs) - see
+    // clips.currentClip, clips.play(name, loop, fadeMs) - see
     // src/ClipPlayer.h.
     readonly property ClipPlayer clips: ClipPlayer {}
 

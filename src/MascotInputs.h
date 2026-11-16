@@ -1,8 +1,12 @@
 #pragma once
 
+#include <QDeadlineTimer>
+#include <QHash>
 #include <QJsonObject>
 #include <QObject>
+#include <QSet>
 #include <QString>
+#include <QStringList>
 #include <QTimer>
 
 class MascotDirector;
@@ -20,7 +24,9 @@ class MascotDirector;
 // lasts, the truth is a snapshot fetched over REST and the events only
 // say when to look: the snapshots are asked for when the stream
 // (re)connects, on the events named below, and every few seconds for as
-// long as they say that something is going on.
+// long as they say that something is going on. An answer that was
+// overtaken by an event is not used: the event is the newer of the two,
+// and the snapshot is asked for once more.
 //
 //   - Offline: the cloud probe (GET /status/connectivity, polled by
 //     StatusStore) failed twice in a row; over with the first probe that
@@ -41,7 +47,9 @@ class MascotDirector;
 //     that is a `done` not seen before, the confetti is thrown - so a
 //     `done` event that got lost is made up for by the next snapshot.
 //     Not by the first one after the app started, though: what that
-//     shows ended before anybody was looking.
+//     shows ended before anybody was looking. When the director has no
+//     use for the confetti right then (a touch reaction playing, the page
+//     hidden, a conversation going on), it is offered again for a while.
 //   - Conversation: the realtime voice session's phase (`realtime:state`
 //     events, GET /audio/realtime/status): connecting is "preparing",
 //     thinking and working (a tool running) are both "thinking",
@@ -55,6 +63,10 @@ public:
     // `pollMs`: how often a snapshot is asked for again while it says
     // that something is going on.
     explicit MascotInputs(MascotDirector *director, int pollMs = 5000, QObject *parent = nullptr);
+
+    // For how long, and how often, confetti the director had no use for
+    // is offered again.
+    void setCelebrationRetry(int forMs, int everyMs);
 
     static QString authorizationPath() { return QStringLiteral("/sign/authorize-status"); }
     static QString goalPath() { return QStringLiteral("/status/goal"); }
@@ -81,21 +93,35 @@ signals:
     void snapshotWanted(const QString &path);
 
 private:
+    void ask(const QString &path);
+    void overtaken(const QString &path);
     void setWaiting(bool waiting, const QString &request = QString());
     void setGoal(const QJsonObject &active);
     bool noteLastGoal(const QJsonObject &last);
+    void celebrate(bool fresh);
     void setConversation(const QString &state);
+    void showConversation(const QString &state);
     void updatePoll();
 
     MascotDirector *m_director;
     int m_failedProbes = 0;
     bool m_waiting = false;
     bool m_goalActive = false;
-    // The goal that ended last, as far as it has been seen (its id and
-    // the time it ended), and whether anything has been seen at all.
-    QString m_lastGoal;
-    bool m_lastGoalKnown = false;
     bool m_conversing = false;
     bool m_conversationPinned = false;
     QTimer m_poll;
+
+    // Per snapshot path: requests not answered yet, and whether an event
+    // on the same subject arrived while there were any.
+    QHash<QString, int> m_asked;
+    QSet<QString> m_overtaken;
+
+    // The goals seen to have ended (id and end time), newest last, and
+    // whether anything has been seen at all.
+    QStringList m_endedGoals;
+    bool m_lastGoalKnown = false;
+    // Confetti still owed, and for how much longer.
+    QTimer m_celebrationRetry;
+    QDeadlineTimer m_celebrationDeadline;
+    int m_celebrationForMs = 60000;
 };
