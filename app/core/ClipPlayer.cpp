@@ -1,4 +1,4 @@
-#include "TimelineLoopCloser.h"
+#include "ClipPlayer.h"
 
 #include <QDebug>
 #include <QList>
@@ -7,7 +7,6 @@
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQmlListReference>
-#include <QSet>
 #include <QUrl>
 #include <QVariant>
 #include <QVector3D>
@@ -35,7 +34,9 @@ QList<Clip> findClips(QObject *sceneRoot)
             continue;
         Clip clip;
         clip.timeline = object;
-        // Same two ways of reaching the animation as setPaused().
+        // The generated QQuickTimelineAnimation is expected to be a
+        // QObject child of its Timeline, but also look in the Timeline's
+        // `animations` list in case it isn't parented that way.
         const auto children = object->findChildren<QObject *>();
         for (QObject *child : children) {
             if (child->inherits("QQuickTimelineAnimation")) {
@@ -56,7 +57,7 @@ QList<Clip> findClips(QObject *sceneRoot)
     return clips;
 }
 
-// Same threshold as AwayPage.qml's hideCollapsedNodes(): a node scaled
+// Same threshold as AwayScene.qml's hideCollapsedNodes(): a node scaled
 // down this far is the model's way of saying "hidden".
 bool isCollapsed(const QVariant &scale)
 {
@@ -99,23 +100,48 @@ QList<Animated> animatedProperties(QObject *timeline)
 
 } // namespace
 
-TimelineLoopCloser::TimelineLoopCloser(QObject *parent)
+ClipPlayer::ClipPlayer(QObject *parent)
     : QObject(parent)
 {
 }
 
-QStringList TimelineLoopCloser::clipNames(QObject *sceneRoot)
+void ClipPlayer::attach(QObject *sceneRoot)
 {
-    QStringList names;
+    detach();
+    if (!sceneRoot)
+        return;
+    m_sceneRoot = sceneRoot;
+    closeLoops();
+    restoreHolds();
     const auto clips = findClips(sceneRoot);
     for (const Clip &clip : clips)
-        names.append(clip.name);
-    return names;
+        m_clipNames.append(clip.name);
+    emit clipNamesChanged();
+    if (!m_clipNames.isEmpty())
+        play(m_clipNames.first());
 }
 
-bool TimelineLoopCloser::playClip(QObject *sceneRoot, const QString &name, int fadeMs)
+void ClipPlayer::detach()
 {
-    const auto clips = findClips(sceneRoot);
+    cancelFade();
+    m_sceneRoot = nullptr;
+    if (!m_clipNames.isEmpty()) {
+        m_clipNames.clear();
+        emit clipNamesChanged();
+    }
+    if (!m_currentClip.isEmpty()) {
+        m_currentClip.clear();
+        emit currentClipChanged();
+    }
+    if (m_paused) {
+        m_paused = false;
+        emit pausedChanged();
+    }
+}
+
+bool ClipPlayer::play(const QString &name, int fadeMs)
+{
+    const auto clips = findClips(m_sceneRoot);
     const Clip *wanted = nullptr;
     for (const Clip &clip : clips) {
         if (clip.name == name) {
@@ -124,7 +150,7 @@ bool TimelineLoopCloser::playClip(QObject *sceneRoot, const QString &name, int f
         }
     }
     if (!wanted) {
-        qWarning() << "TimelineLoopCloser: no clip named" << name;
+        qWarning() << "ClipPlayer: no clip named" << name;
         return false;
     }
     // A fade still in progress simply becomes part of the pose captured
@@ -187,11 +213,19 @@ bool TimelineLoopCloser::playClip(QObject *sceneRoot, const QString &name, int f
         }
     }
 
-    emit clipStarted(sceneRoot, name);
+    if (m_currentClip != name) {
+        m_currentClip = name;
+        emit currentClipChanged();
+    }
+    // The clip restarts running, whatever the previous one was doing.
+    if (m_paused) {
+        m_paused = false;
+        emit pausedChanged();
+    }
     return true;
 }
 
-void TimelineLoopCloser::onFadeFrame()
+void ClipPlayer::onFadeFrame()
 {
     if (!m_fadeTimeline) {
         cancelFade();
@@ -216,7 +250,7 @@ void TimelineLoopCloser::onFadeFrame()
         cancelFade();
 }
 
-void TimelineLoopCloser::cancelFade()
+void ClipPlayer::cancelFade()
 {
     if (m_fadeTimeline)
         disconnect(m_fadeTimeline, SIGNAL(currentFrameChanged()), this, SLOT(onFadeFrame()));
@@ -224,13 +258,11 @@ void TimelineLoopCloser::cancelFade()
     m_faded.clear();
 }
 
-int TimelineLoopCloser::restoreHolds(QObject *sceneRoot)
+int ClipPlayer::restoreHolds()
 {
-    if (!sceneRoot)
-        return 0;
-    QQmlEngine *engine = qmlEngine(sceneRoot);
+    QQmlEngine *engine = qmlEngine(m_sceneRoot.data());
     if (!engine) {
-        qWarning() << "TimelineLoopCloser: no QML engine for" << sceneRoot;
+        qWarning() << "ClipPlayer: no QML engine for" << m_sceneRoot.data();
         return 0;
     }
     QQmlComponent keyframeComponent(engine);
@@ -243,7 +275,7 @@ int TimelineLoopCloser::restoreHolds(QObject *sceneRoot)
     };
 
     int inserted = 0;
-    const auto clips = findClips(sceneRoot);
+    const auto clips = findClips(m_sceneRoot);
     for (const Clip &clip : clips) {
         // Pass 1: every group's keys in frame order, and the smallest gap
         // between neighbours anywhere in the clip (= its sampling interval).
@@ -290,7 +322,7 @@ int TimelineLoopCloser::restoreHolds(QObject *sceneRoot)
                 const qreal holdFor = isSwitch ? gap - qMin(gap / 2, switchFrames) : gap - interval;
                 QObject *keyframe = keyframeComponent.create();
                 if (!keyframe) {
-                    qWarning() << "TimelineLoopCloser: cannot create Keyframe:"
+                    qWarning() << "ClipPlayer: cannot create Keyframe:"
                                << keyframeComponent.errorString();
                     return inserted;
                 }
@@ -303,17 +335,15 @@ int TimelineLoopCloser::restoreHolds(QObject *sceneRoot)
         }
     }
 
-    qInfo() << "TimelineLoopCloser: restored" << inserted << "held keyframe(s) in" << clips.size() << "clip(s)";
+    qInfo() << "ClipPlayer: restored" << inserted << "held keyframe(s) in" << clips.size() << "clip(s)";
     return inserted;
 }
 
-int TimelineLoopCloser::closeLoops(QObject *sceneRoot)
+int ClipPlayer::closeLoops()
 {
-    if (!sceneRoot)
-        return 0;
-    QQmlEngine *engine = qmlEngine(sceneRoot);
+    QQmlEngine *engine = qmlEngine(m_sceneRoot.data());
     if (!engine) {
-        qWarning() << "TimelineLoopCloser: no QML engine for" << sceneRoot;
+        qWarning() << "ClipPlayer: no QML engine for" << m_sceneRoot.data();
         return 0;
     }
 
@@ -323,7 +353,7 @@ int TimelineLoopCloser::closeLoops(QObject *sceneRoot)
     keyframeComponent.setData("import QtQuick.Timeline\nKeyframe {}", QUrl());
 
     int patched = 0;
-    const auto objects = sceneRoot->findChildren<QObject *>();
+    const auto objects = m_sceneRoot->findChildren<QObject *>();
     for (QObject *timeline : objects) {
         if (!timeline->inherits("QQuickTimeline"))
             continue;
@@ -352,7 +382,7 @@ int TimelineLoopCloser::closeLoops(QObject *sceneRoot)
 
             QObject *keyframe = keyframeComponent.create();
             if (!keyframe) {
-                qWarning() << "TimelineLoopCloser: cannot create Keyframe:"
+                qWarning() << "ClipPlayer: cannot create Keyframe:"
                            << keyframeComponent.errorString();
                 return patched;
             }
@@ -364,40 +394,28 @@ int TimelineLoopCloser::closeLoops(QObject *sceneRoot)
         }
     }
 
-    qInfo() << "TimelineLoopCloser: closed the loop on" << patched << "keyframe group(s)";
+    qInfo() << "ClipPlayer: closed the loop on" << patched << "keyframe group(s)";
     return patched;
 }
 
-int TimelineLoopCloser::setPaused(QObject *sceneRoot, bool paused)
+void ClipPlayer::setPaused(bool paused)
 {
-    if (!sceneRoot)
-        return 0;
-
-    // The generated QQuickTimelineAnimation is expected to be a QObject
-    // child of its Timeline, but also walk each Timeline's `animations`
-    // list in case it isn't parented that way.
-    QSet<QObject *> animations;
-    const auto objects = sceneRoot->findChildren<QObject *>();
-    for (QObject *object : objects) {
-        if (object->inherits("QQuickTimelineAnimation")) {
-            animations.insert(object);
-        } else if (object->inherits("QQuickTimeline")) {
-            QQmlListReference list(object, "animations");
-            for (qsizetype i = 0; list.isValid() && i < list.count(); ++i) {
-                if (QObject *animation = list.at(i))
-                    animations.insert(animation);
-            }
+    if (paused == m_paused)
+        return;
+    // Only the clip that is playing: play() stops the others, and Qt
+    // warns about pausing an animation that isn't running.
+    bool found = false;
+    const auto clips = findClips(m_sceneRoot);
+    for (const Clip &clip : clips) {
+        if (clip.animation && clip.animation->property("running").toBool()) {
+            clip.animation->setProperty("paused", paused);
+            found = true;
         }
     }
-
-    // Only the clip that is playing: playClip() stops the others, and Qt
-    // warns about pausing an animation that isn't running.
-    for (QObject *animation : std::as_const(animations)) {
-        if (animation->property("running").toBool())
-            animation->setProperty("paused", paused);
+    if (!found) {
+        qWarning() << "ClipPlayer: no running clip to" << (paused ? "pause" : "resume");
+        return;
     }
-
-    if (animations.isEmpty())
-        qWarning() << "TimelineLoopCloser: no timeline animation found to" << (paused ? "pause" : "resume");
-    return animations.size();
+    m_paused = paused;
+    emit pausedChanged();
 }

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick3D
 import QtQuick3D.AssetUtils
+import EdgeFrontQt.Core
 
 // The away page's 3D scene: the mascot model, loaded at run time from a
 // glTF file by Quick3D's RuntimeLoader, with the designer's camera,
@@ -20,15 +21,15 @@ import QtQuick3D.AssetUtils
 // is needed to keep it playing. What it does NOT do is close the loop:
 // glTF keyframes rarely start at t=0, and the timeline fills that gap by
 // blending in from the rest pose on every wrap-around (a twitch once per
-// cycle). timelineLoopCloser (core/TimelineLoopCloser.h) patches the
-// generated timeline once the model has loaded - see that header.
+// cycle). ClipPlayer (core/ClipPlayer.h) patches the generated timelines
+// once the model has loaded - see that header.
 //
 // Asset: assets/away/VIO_DesktopPet.glb, the designer's mascot model
 // (tracked via git-lfs, see ../../.gitattributes, and listed in
 // CMakeLists.txt's RESOURCES). Unlike the CesiumMan placeholder it
 // replaced (one walk cycle), it carries 19 clips named by event
 // ("idle.default", "welcome", "touch.left", ...). RuntimeLoader only ever
-// shows the first one by itself; playClip() switches between them. Which
+// shows the first one by itself; `clips` switches between them. Which
 // event plays which clip is not wired up - see
 // ../docs/user-model-spec.md.
 View3D {
@@ -249,39 +250,10 @@ View3D {
                     "glass", glassModel)
     }
 
-    // Clips (glTF animations) in the loaded model, the one playing, and
-    // whether it is paused. The last two are changed through playClip()
-    // and setPaused().
-    property var clipNames: []
-    property string currentClip: ""
-    property bool paused: false
-
-    // Cross-fade length for clip switches, see TimelineLoopCloser::playClip.
-    readonly property int fadeMs: 225
-
-    // Switches to clip `name` right away, cross-faded from wherever the
-    // playing clip is.
-    function playClip(name) {
-        timelineLoopCloser.playClip(loader, name, fadeMs)
-    }
-
-    // Freezes or resumes the generated TimelineAnimation (unreachable
-    // from QML, hence the C++ helper - see core/TimelineLoopCloser.h).
-    function setPaused(paused) {
-        scene.paused = paused
-        timelineLoopCloser.setPaused(loader, paused)
-    }
-
-    Connections {
-        target: timelineLoopCloser
-        function onClipStarted(sceneRoot, name) {
-            if (sceneRoot !== loader)
-                return
-            scene.currentClip = name
-            // The clip restarts running, whatever the previous one was doing.
-            scene.paused = false
-        }
-    }
+    // The loaded model's animation clips: clips.clipNames,
+    // clips.currentClip, clips.paused, clips.play(name, fadeMs) - see
+    // core/ClipPlayer.h.
+    readonly property ClipPlayer clips: ClipPlayer {}
 
     environment: SceneEnvironment {
         clearColor: "#000000"
@@ -435,21 +407,10 @@ View3D {
             scene.displayModel = null
             scene.glassModel = null
             scene.lightCue = null
+            scene.clips.detach()
             if (status === RuntimeLoader.Success) {
                 scene.findRig()
-                timelineLoopCloser.closeLoops(loader)
-                timelineLoopCloser.restoreHolds(loader)
-                scene.clipNames = timelineLoopCloser.clipNames(loader)
-                // Through playClip() even for the clip RuntimeLoader
-                // already started, so the other clips' animations
-                // stop ticking in the background.
-                if (scene.clipNames.length > 0) {
-                    timelineLoopCloser.playClip(loader, scene.clipNames[0])
-                    // Not left to onClipStarted: a model that loads
-                    // while the scene is still being built gets here
-                    // before that Connections object exists.
-                    scene.currentClip = scene.clipNames[0]
-                }
+                scene.clips.attach(loader)
                 if (scene.cullCollapsed)
                     scene.hideCollapsedNodes()
                 scene.framesToMeasure = 600

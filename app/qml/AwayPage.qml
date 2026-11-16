@@ -19,12 +19,17 @@ import QtQuick.Controls
 Item {
     id: root
 
+    // Cross-fade length for clip switches, see ClipPlayer::play.
+    readonly property int fadeMs: 225
+
+    // Switches to the next (or previous) clip right away, cross-faded
+    // from wherever the playing one is.
     function stepClip(delta) {
-        const names = scene.clipNames
+        const names = scene.clips.clipNames
         if (names.length === 0)
             return
-        const i = names.indexOf(scene.currentClip)
-        scene.playClip(names[(i + delta + names.length) % names.length])
+        const i = names.indexOf(scene.clips.currentClip)
+        scene.clips.play(names[(i + delta + names.length) % names.length], fadeMs)
     }
 
     // It's a standby screen: don't leave it parked at whatever odd angle
@@ -135,8 +140,8 @@ Item {
         anchors.right: parent.right
         anchors.topMargin: 8
         anchors.rightMargin: 16
-        clipName: scene.currentClip
-        paused: scene.paused
+        clipName: scene.clips.currentClip
+        paused: scene.clips.paused
     }
 
     // Loading / failure notice, see AwayScene's loadState. Text only: the
@@ -159,14 +164,14 @@ Item {
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.margins: 16
-        text: scene.paused ? "播放" : "暂停"
-        onClicked: scene.setPaused(!scene.paused)
+        text: scene.clips.paused ? "播放" : "暂停"
+        onClicked: scene.clips.paused = !scene.clips.paused
     }
 
     // Steps through the model's clips, so every one of them can be checked
     // on the device. Stand-in for the real thing (events picking clips).
     Row {
-        visible: scene.loadState === "ready" && scene.clipNames.length > 1
+        visible: scene.loadState === "ready" && scene.clips.clipNames.length > 1
         anchors.bottom: parent.bottom
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.margins: 16
@@ -182,7 +187,7 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             color: "#9e9e9e"
             font.pixelSize: 28
-            text: scene.currentClip + "\n" + (scene.clipNames.indexOf(scene.currentClip) + 1) + " / " + scene.clipNames.length
+            text: scene.clips.currentClip + "\n" + (scene.clips.clipNames.indexOf(scene.clips.currentClip) + 1) + " / " + scene.clips.clipNames.length
         }
         Button {
             text: "▶"

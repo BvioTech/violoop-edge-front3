@@ -32,9 +32,9 @@
 - 只验证过"文件内恰好一段骨骼动画"（CesiumMan）。文件里有多段动画时
   `RuntimeLoader` 的行为没测过。
 - 生成的 Timeline / TimelineAnimation 从 QML 里够不到，现在靠
-  `../core/TimelineLoopCloser.h` 从 C++ 侧找到它们来补循环起点和暂停。
+  `../core/ClipPlayer.h` 从 C++ 侧找到它们来补循环起点和暂停。
   按事件切换动画大概率也要走这条路，或者换一种加载方式。
-- `TimelineLoopCloser` 只补时间轴开头的空档，不修复首尾姿态不连续，
+- `ClipPlayer` 只补时间轴开头的空档，不修复首尾姿态不连续，
   所以目前循环动画需要首尾姿态一致。
 
 待定事项：
@@ -88,11 +88,11 @@ mesh，80 个材质（导入后合并为 61 个），15 张 PNG 贴图（最大 
   TimelineAnimation，**只启用第一个 Timeline**（所以默认只看得到第一段），
   但所有 TimelineAnimation 都在跑。动画名保留在 TimelineAnimation 的
   `objectName` 上；节点名不保留。可以按名字切换：
-  `TimelineLoopCloser::playClip`，必须先停用旧 Timeline 再启用新的。
+  `ClipPlayer::play`，必须先停用旧 Timeline 再启用新的。
   切换后旧动画改过的属性会回到静止值，道具不会残留（截图确认）。
 - **导入器会丢关键帧，改变动作**：与前一帧值相同的关键帧全部丢弃，包括
   "一段保持"的最后一帧，于是保持变成了缓慢线性过渡（眨眼变成眼睛慢慢
-  压扁 3.6 秒）。`TimelineLoopCloser::restoreHolds` 按采样间隔补回（本
+  压扁 3.6 秒）。`ClipPlayer::restoreHolds` 按采样间隔补回（本
   模型补了 1257 个），对固定帧率烘焙的动画是精确的，对疏密混合的动画不
   是——根治要改我们 Qt fork 里的导入器。"隐藏↔显示"的缩放切换另外处理成
   瞬时的：第一次上屏时环形灯在每次亮度换档时会灭一两帧（两组灯效网格
@@ -101,7 +101,7 @@ mesh，80 个材质（导入后合并为 61 个），15 张 PNG 贴图（最大 
   无影响。STEP 插值被当成 LINEAR，烘焙到 30 fps 后看不出差别。
 - **用缩放 1e-5 做"隐藏"**：glTF 不能给可见性做动画，这个模型把不用的
   道具和 18 组灯效网格中的 17 组缩到 1e-5（占 22.9 万面）。Quick3D 照样
-  绘制它们。`AwayPage.qml` 现在让"缩放 < 0.001 的带网格节点"不可见：
+  绘制它们。`AwayScene.qml` 现在让"缩放 < 0.001 的带网格节点"不可见：
   默认视角 34 → 47 fps。
 - **帧率**：默认视角约 47 fps（各段动画 34–47，`idle.coding`、`working`
   最低），拉到最近约 28 fps；同一测试里 CesiumMan 是 100 fps。关掉 MSAA
@@ -117,7 +117,7 @@ mesh，80 个材质（导入后合并为 61 个），15 张 PNG 贴图（最大 
   约 30 秒：53.6 fps、GPU 84%，和替换前（55.0 fps、79%）相近。
 
 - **动画之间的过渡**（已做）：任何时刻切换都立即进行，带 225 ms 交叉淡化
-  （`TimelineLoopCloser::playClip` 的 `fadeMs`；QtQuickTimeline 本身不能
+  （`ClipPlayer::play` 的 `fadeMs`；QtQuickTimeline 本身不能
   混合两段动画，是切换时抓取当前姿态再逐帧插值过去）。试过"`idle.*`
   之间等当前这一轮播完再切"，上屏后觉得等待太久，去掉了。道具的出现/
   消失和灯的颜色仍是瞬时的——它们是"显示/隐藏"开关，没法混合，要顺滑

@@ -98,7 +98,7 @@ Quick3D 的角色动画能力）。
   **动画前原始值**（骨骼静止/绑定姿态）插值过去的，所以每圈回绕时所有
   骨骼会瞬间弹回静止姿态、再用约 42ms 混回行走动作——每 2s 抽动一次，
   和其他 glTF 查看器里看到的完整循环不一样。修复：
-  `core/TimelineLoopCloser`（context property `timelineLoopCloser`）在
+  `core/ClipPlayer`（当时叫 `TimelineLoopCloser`，是个 context property）在
   模型加载成功后找到生成的 Timeline，给每个关键帧组在起始帧补一个取
   "最后一个关键帧的值"的关键帧，回绕处位置连续、周期仍是 2000ms。
   在开发机（amd64）用桌面版 Qt 6.8.3 离屏验证过：整个 app 编译通过；
@@ -119,7 +119,7 @@ Quick3D 的角色动画能力）。
   pitch 限制在 -60°..20°），双指捏合缩放（相机距离 1.5..8），松手 4 秒后
   缓动回默认视角（待机页不该停在某个奇怪角度）。默认视角与原来的固定
   相机完全一致（轨道中心 y≈0.58、距离≈3.55、俯角 10°）。左下角加了
-  "暂停/播放"按钮，通过 `TimelineLoopCloser::setPaused` 暂停
+  "暂停/播放"按钮，通过 `ClipPlayer` 的 `paused` 暂停
   `RuntimeLoader` 生成的 `TimelineAnimation`——暂停后仍可旋转查看定格
   姿态，作为"动画是运行时求值"的佐证。主光保持世界固定（明暗随视角
   变化本身也是证据），另加一盏弱补光避免转到背面全黑。**验证情况**：在开发机

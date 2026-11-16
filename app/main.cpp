@@ -2,7 +2,9 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QtQml>
 
+#include "core/ClipPlayer.h"
 #include "core/JournalLog.h"
 #include "core/NavController.h"
 #include "core/PerfRecorder.h"
@@ -12,7 +14,6 @@
 #include "core/StatusStore.h"
 #include "core/SystemStats.h"
 #include "core/TestVerdictStore.h"
-#include "core/TimelineLoopCloser.h"
 #include "core/UnixSignalWatcher.h"
 #include "core/UpgradeStore.h"
 
@@ -34,6 +35,9 @@ int main(int argc, char *argv[])
     font.setFamily(QStringLiteral("Sans Serif"));
     app.setFont(font);
 
+    // Instantiated by qml/AwayScene.qml, one per loaded model.
+    qmlRegisterType<ClipPlayer>("EdgeFrontQt.Core", 1, 0, "ClipPlayer");
+
     QQmlApplicationEngine engine;
 
     auto *rest = new RestClient(&engine);
@@ -48,7 +52,6 @@ int main(int argc, char *argv[])
     auto *testVerdicts = new TestVerdictStore(rest, &engine);
     auto *upgrade = new UpgradeStore(rest, sse, &engine);
     auto *nav = new NavController(QStringLiteral("HomePage.qml"), &engine);
-    auto *timelineLoopCloser = new TimelineLoopCloser(&engine);
     auto *systemStats = new SystemStats(&engine);
     auto *perfRecorder = new PerfRecorder(systemStats, &engine);
     // SIGUSR1 saves a picture of the window, SIGUSR2 starts or stops the
@@ -71,7 +74,6 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("statusStore", status);
     engine.rootContext()->setContextProperty("testVerdictStore", testVerdicts);
     engine.rootContext()->setContextProperty("upgradeStore", upgrade);
-    engine.rootContext()->setContextProperty("timelineLoopCloser", timelineLoopCloser);
     engine.rootContext()->setContextProperty("systemStats", systemStats);
     engine.rootContext()->setContextProperty("perfRecorder", perfRecorder);
 
