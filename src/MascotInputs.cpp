@@ -1,7 +1,6 @@
 #include "MascotInputs.h"
 
 #include <QJsonDocument>
-#include <QJsonObject>
 
 #include "MascotDirector.h"
 
@@ -10,12 +9,17 @@ namespace {
 constexpr int kOfflineAfterFailedProbes = 2;
 }
 
-MascotInputs::MascotInputs(MascotDirector *director, int authorizationPollMs, QObject *parent)
+MascotInputs::MascotInputs(MascotDirector *director, int pollMs, QObject *parent)
     : QObject(parent)
     , m_director(director)
 {
-    m_authorizationPoll.setInterval(authorizationPollMs);
-    connect(&m_authorizationPoll, &QTimer::timeout, this, &MascotInputs::authorizationStatusWanted);
+    m_poll.setInterval(pollMs);
+    connect(&m_poll, &QTimer::timeout, this, [this]() {
+        if (m_waiting)
+            emit snapshotWanted(authorizationPath());
+        if (m_goalActive)
+            emit snapshotWanted(goalPath());
+    });
 }
 
 void MascotInputs::connectivityProbed(bool ok)
@@ -32,41 +36,81 @@ void MascotInputs::connectivityProbed(bool ok)
 void MascotInputs::eventsConnected()
 {
     // Whatever happened while the stream was down was not replayed.
-    emit authorizationStatusWanted();
+    emit snapshotWanted(authorizationPath());
+    emit snapshotWanted(goalPath());
 }
 
 void MascotInputs::eventReceived(const QString &type, const QString &data)
 {
-    if (type != QLatin1String("notification"))
-        return;
-    const QJsonObject event = QJsonDocument::fromJson(data.toUtf8()).object();
-    if (event.value(QLatin1String("kind")).toString() != QLatin1String("authorization"))
-        return;
-    // A new request shows at once; anything else, and also whether the
-    // new one is still there, is for the snapshot to say.
-    if (event.value(QLatin1String("state")).toString() == QLatin1String("open"))
-        setWaiting(true, event.value(QLatin1String("notifId")).toString());
-    emit authorizationStatusWanted();
+    if (type == QLatin1String("notification")) {
+        const QJsonObject event = QJsonDocument::fromJson(data.toUtf8()).object();
+        if (event.value(QLatin1String("kind")).toString() != QLatin1String("authorization"))
+            return;
+        // A new request shows at once; anything else, and also whether
+        // the new one is still there, is for the snapshot to say.
+        if (event.value(QLatin1String("state")).toString() == QLatin1String("open"))
+            setWaiting(true, event.value(QLatin1String("notifId")).toString());
+        emit snapshotWanted(authorizationPath());
+    } else if (type == QLatin1String("goal.state")) {
+        const QJsonObject event = QJsonDocument::fromJson(data.toUtf8()).object();
+        if (event.isEmpty())
+            return;
+        // The cue first: it ends the goal that was being shown, and what
+        // `active` says then only takes over once the confetti is down.
+        if (event.value(QLatin1String("state")).toString() == QLatin1String("done"))
+            m_director->cue(MascotDirector::Done);
+        setGoal(event.value(QLatin1String("active")).toObject());
+    }
 }
 
-void MascotInputs::authorizationStatusReceived(int statusCode, const QString &body)
+void MascotInputs::snapshotReceived(const QString &path, int statusCode, const QString &body)
 {
-    // No answer, or 503 "auth broker not initialized": violoop-edge is
-    // down or starting, and its requests did not survive that.
+    // No answer, or an error (503 while violoop-edge starts): it is down
+    // or was restarted, and neither its authorization requests nor its
+    // goals survive that.
     QJsonObject active;
     if (statusCode == 200)
         active = QJsonDocument::fromJson(body.toUtf8()).object().value(QLatin1String("active")).toObject();
-    setWaiting(!active.isEmpty(), active.value(QLatin1String("context")).toString());
+    if (path == authorizationPath())
+        setWaiting(!active.isEmpty(), active.value(QLatin1String("context")).toString());
+    else if (path == goalPath())
+        setGoal(active);
 }
 
 void MascotInputs::setWaiting(bool waiting, const QString &request)
 {
-    if (waiting) {
+    m_waiting = waiting;
+    if (waiting)
         m_director->set(MascotDirector::WaitingUser, request);
-        if (!m_authorizationPoll.isActive())
-            m_authorizationPoll.start();
-    } else {
+    else
         m_director->clear(MascotDirector::WaitingUser);
-        m_authorizationPoll.stop();
-    }
+    updatePoll();
+}
+
+// `active`: as in GET /status/goal - empty, or a goal that is being
+// worked on, or one that failed.
+void MascotInputs::setGoal(const QJsonObject &active)
+{
+    const QString state = active.value(QLatin1String("state")).toString();
+    const bool working = state == QLatin1String("working");
+    const bool failed = state == QLatin1String("failed");
+    m_goalActive = working || failed;
+    if (working)
+        m_director->set(MascotDirector::Working, active.value(QLatin1String("goalId")).toString());
+    else
+        m_director->clear(MascotDirector::Working);
+    if (failed)
+        m_director->set(MascotDirector::Error);
+    else
+        m_director->clear(MascotDirector::Error);
+    updatePoll();
+}
+
+void MascotInputs::updatePoll()
+{
+    const bool wanted = m_waiting || m_goalActive;
+    if (wanted && !m_poll.isActive())
+        m_poll.start();
+    else if (!wanted)
+        m_poll.stop();
 }

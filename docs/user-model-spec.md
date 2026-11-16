@@ -22,7 +22,7 @@
 ## 动画
 
 一个模型带多段动画，由状态和事件决定播哪一段。框架已实现（2026-11-16），
-外部事件接了离线和等待审批两种；对用户模型的要求等接完再定稿。
+外部事件接了离线、等待审批、工作、完成和异常；对用户模型的要求等接完再定稿。
 
 **分工**
 
@@ -55,11 +55,15 @@
   - **等待用户**：有授权请求在等（`GET /sign/authorize-status` 的 `active`
     非空）。`notification` 事件（`kind: authorization`）只用来提示"该去查
     了"；SSE 连上时、每条这类事件、以及等待期间每 5 秒各查一次。
+  - **工作、异常、完成**：violoop-edge 的目标状态（`goal.state` 事件和
+    `GET /status/goal` 快照，协议见 `../../device/docs/protocols/
+    local-http-events.md` §3.2a）。事件里带的 `active` 和快照同形，直接
+    当快照用：`working` → 工作（目标 id 决定用哪段工作动画），`failed` →
+    异常，空 → 都清掉。`done` 事件另外撒一次花，快照从不补撒。SSE 连上时、
+    有目标或异常期间每 5 秒查一次快照。查不到（edge 没起来）按"没有"算。
 
 **还没做的**
 
-- 工作、完成、异常：violoop-edge 还没有合适的事件，需求见
-  `handoff-device-mascot-events.md`。
 - 实时对话（`realtime:state`）：导演要加一层"对话"，聆听时还要把
   `waiting_user` 动画自带的橘红灯盖成青色。
 - 等待用户现在只覆盖审批，不覆盖"等用户回话"。

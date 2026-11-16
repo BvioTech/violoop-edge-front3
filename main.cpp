@@ -81,17 +81,10 @@ int main(int argc, char *argv[])
                      [mascotInputs, status]() { mascotInputs->connectivityProbed(status->connectivityOk()); });
     QObject::connect(sse, &SseClient::connected, mascotInputs, &MascotInputs::eventsConnected);
     QObject::connect(sse, &SseClient::eventReceived, mascotInputs, &MascotInputs::eventReceived);
-    QObject::connect(mascotInputs, &MascotInputs::authorizationStatusWanted, rest,
-                     [rest]() { rest->get(MascotInputs::authorizationStatusPath()); });
-    QObject::connect(rest, &RestClient::requestSucceeded, mascotInputs,
-                     [mascotInputs](const QString &path, int statusCode, const QString &body) {
-                         if (path == MascotInputs::authorizationStatusPath())
-                             mascotInputs->authorizationStatusReceived(statusCode, body);
-                     });
-    QObject::connect(rest, &RestClient::requestFailed, mascotInputs, [mascotInputs](const QString &path) {
-        if (path == MascotInputs::authorizationStatusPath())
-            mascotInputs->authorizationStatusReceived(0, QString());
-    });
+    QObject::connect(mascotInputs, &MascotInputs::snapshotWanted, rest, &RestClient::get);
+    QObject::connect(rest, &RestClient::requestSucceeded, mascotInputs, &MascotInputs::snapshotReceived);
+    QObject::connect(rest, &RestClient::requestFailed, mascotInputs,
+                     [mascotInputs](const QString &path) { mascotInputs->snapshotReceived(path, 0, QString()); });
     // SIGUSR1 saves a picture of the window, SIGUSR2 starts or stops the
     // away page's performance recording - see UnixSignalWatcher.h.
     auto *signalWatcher = new UnixSignalWatcher(&engine);
