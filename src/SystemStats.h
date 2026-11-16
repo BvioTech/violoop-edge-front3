@@ -7,7 +7,7 @@
 // CPU load, GPU load and SoC temperature of the machine the app runs on,
 // and this process's memory, read once a second straight from the kernel
 // (/proc/stat, the GPU's devfreq node, the thermal zones,
-// /proc/self/status) - for the away page's readout (qml/PerfOverlay.qml),
+// /proc/self/status) - for the home page's readout (qml/PerfOverlay.qml),
 // next to the frame rate that counts itself, and for PerfRecorder.
 //
 // Only polls while `active` is set, so nothing is read when no page is

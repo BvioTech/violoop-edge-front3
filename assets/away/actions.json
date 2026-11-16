@@ -1,0 +1,28 @@
+{
+  "once": ["welcome", "done", "touch.lick", "touch.what", "touch.left", "touch.right"],
+  "idle": {
+    "base": "idle.default",
+    "interludes": [
+      "idle.playing",
+      "idle.wandering",
+      "idle.jumping",
+      "idle.drawing",
+      "idle.music",
+      "idle.sleep",
+      "idle.bored"
+    ]
+  },
+  "work": ["working", "idle.reading", "idle.coding"],
+  "conditions": {
+    "offline": "offline",
+    "error": "error",
+    "waiting_user": "waiting_user"
+  },
+  "cues": {
+    "welcome": ["welcome"],
+    "done": ["done"],
+    "touch_left": ["touch.left"],
+    "touch_middle": ["touch.lick", "touch.what"],
+    "touch_right": ["touch.right"]
+  }
+}

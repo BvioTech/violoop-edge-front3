@@ -2,8 +2,8 @@ name: CI
 
 # PR validation only - build-release.yml (tag push / workflow_dispatch)
 # handles the actual .deb build and release. This just needs to catch
-# compile errors and QML load errors before merge; no separate test
-# framework exists for this C++/QML project yet.
+# compile errors, unit test failures (tests/, QtTest) and QML load errors
+# before merge.
 on:
   pull_request:
     branches: [main]
@@ -69,6 +69,11 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/opt/violoop-qt6
           cmake --build build
+
+      - name: Unit tests
+        run: |
+          LD_LIBRARY_PATH=/opt/violoop-qt6/lib \
+            ctest --test-dir build --output-on-failure
 
       - name: Offscreen smoke test
         # Loads AppShell.qml and every page it can reach without a

@@ -7,6 +7,7 @@
 #include <QString>
 #include <QStringList>
 #include <QVariant>
+#include <QVariantList>
 
 // Plays the animation clips of one model loaded by Quick3D's
 // RuntimeLoader: which clips there are, which one is playing, switching
@@ -27,7 +28,7 @@
 // properties and QQmlListReference only, so the app doesn't need
 // QtQuickTimeline's private headers.
 //
-// What a model with several clips looks like (VIO_DesktopPet.glb: 19,
+// What a model with several clips looks like (VIO_DesktopPet.glb: 20,
 // named by event - "idle.default", "welcome", "touch.left", ...),
 // measured on dev1 (Qt 6.8.5-violoop3): one Timeline + TimelineAnimation
 // per clip, only the *first* Timeline enabled, so only the first clip is
@@ -41,6 +42,8 @@ class ClipPlayer : public QObject
     // The clips' names in file order ("clip <n>" for an unnamed one).
     // Empty while no model is attached.
     Q_PROPERTY(QStringList clipNames READ clipNames NOTIFY clipNamesChanged)
+    // Each clip's length in milliseconds, in the order of clipNames.
+    Q_PROPERTY(QVariantList clipDurations READ clipDurations NOTIFY clipNamesChanged)
     // The clip that is playing; change it with play().
     Q_PROPERTY(QString currentClip READ currentClip NOTIFY currentClipChanged)
     // Freezes the playing clip where it is. Starting a clip clears it.
@@ -50,6 +53,7 @@ public:
     explicit ClipPlayer(QObject *parent = nullptr);
 
     QStringList clipNames() const { return m_clipNames; }
+    QVariantList clipDurations() const { return m_clipDurations; }
     QString currentClip() const { return m_currentClip; }
     bool paused() const { return m_paused; }
     void setPaused(bool paused);
@@ -65,8 +69,17 @@ public:
     // Forgets the model, e.g. when the loader is given another file.
     Q_INVOKABLE void detach();
 
-    // Makes `name` the one clip that plays, looping from its first frame,
-    // and stops the others' animations. Disabling a Timeline puts every
+    // Stops the playing clip where it is, for when the model is not
+    // being shown: a running clip costs CPU whether or not anything is
+    // drawn. The pose stays; the next play() starts over.
+    Q_INVOKABLE void stop();
+
+    // Makes `name` the one clip that plays, from its first frame, and
+    // stops the others' animations. With `loop` it repeats until
+    // something else is played; without, it plays through once and holds
+    // its last frame. Which clip comes next, and when, is up to the
+    // caller (MascotDirector) - nothing is reported back when a clip
+    // ends. Disabling a Timeline puts every
     // property it animated back to its pre-animation value, and enabling
     // one captures the current values as *its* pre-animation values - so
     // the old clip is always disabled before the new one is enabled,
@@ -86,7 +99,7 @@ public:
     // is the new clip's own frame counter, so pausing pauses the fade.
     // Hidden<->shown scale switches (see restoreHolds) are left out:
     // props and lamp colours still cut, only the motion is smoothed.
-    Q_INVOKABLE bool play(const QString &name, int fadeMs = 0);
+    Q_INVOKABLE bool play(const QString &name, bool loop = true, int fadeMs = 0);
 
 signals:
     void clipNamesChanged();
@@ -165,6 +178,7 @@ private:
 
     QPointer<QObject> m_sceneRoot;
     QStringList m_clipNames;
+    QVariantList m_clipDurations;
     QString m_currentClip;
     bool m_paused = false;
 

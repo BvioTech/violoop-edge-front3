@@ -6,17 +6,19 @@
 
 ## 功能
 
-- **主页**：左上角设备状态图标（WiFi/云端/HDMI/USB/配对口）。
+- **主页**：实时渲染的 3D 吉祥物（`qml/HomePage.qml`，Qt Quick3D
+  `RuntimeLoader` 运行时加载 glTF），对应 edge-front2 的待机页
+  `lib/pages/away/away_page.dart`（那边播的是预渲染 MP4）。单指滑动旋转
+  视角、双指缩放、可暂停，用来证明是实时 3D 而不是视频。播哪段动画由
+  `src/MascotDirector` 决定：没事时待机和随机小动作交替，点模型的左、中、
+  右会有反应，页面底部可手动指定一段（"自动"交还给它）。后端事件还没有
+  接进来，见 `docs/user-model-spec.md` 的"动画"一节。左上角是设备状态
+  图标（WiFi/云端/HDMI/USB/配对口），右上角"开发"按钮进开发菜单。
 - **工厂测试**：19 项测试 + `/stress` 占位。
-- **调试菜单**：设备状态、授权、音量、推送、升级回放、音频资源、SSH、
+- **开发菜单**：工厂测试、调试、版本和升级的入口。
+- **调试**：设备状态、授权、音量、推送、升级回放、音频资源、SSH、
   恢复出厂、触摸诊断、WiFi 配置。
 - **版本和升级**：轮询/推送合并、不可达宽限、失速检测、自适应轮询规则。
-- **待机（Away）**：持续播放的 3D 骨骼动画（`qml/AwayPage.qml`，Qt
-  Quick3D `RuntimeLoader` 运行时加载 glTF），对应 edge-front2 的
-  `lib/pages/away/away_page.dart`（那边播的是预渲染 MP4，这边是实时
-  渲染）。单指滑动旋转视角、双指缩放、可暂停，用来证明是实时 3D 而
-  不是视频。模型见下方"结构"，页面底部可手动切换模型里的各段动画，
-  从开发菜单进入。
 
 详细进度见 `docs/progress.md`。
 
@@ -27,19 +29,22 @@
 ├── CMakeLists.txt
 ├── main.cpp
 ├── src/             # C++：RestClient/SseClient、StatusStore/TestVerdictStore/
-│                       UpgradeStore/NavController；待机页用的 ClipPlayer
-│                       （动画片段）、SystemStats/PerfRecorder（性能读数和
-│                       记录）；JournalLog（日志级别）、UnixSignalWatcher/
-│                       Screenshot（SIGUSR1 截图）、StateDir
+│                       UpgradeStore/NavController；主页用的 ClipPlayer
+│                       （播放动画片段）、MascotDirector/ActionCatalog
+│                       （决定播哪一段）、SystemStats/PerfRecorder（性能
+│                       读数和记录）；JournalLog（日志级别）、
+│                       UnixSignalWatcher/Screenshot（SIGUSR1 截图）、StateDir
+├── tests/            # 单元测试（QtTest），`ctest --test-dir build`
 ├── qml/              # 所有页面，flat 结构（不用子目录，避免 QML 跨目录
 │                       import/qmldir 问题），TestPageFrame.qml 是 19+
-│                       工厂测试子页面共用的外壳；待机页是 AwayPage.qml
-│                       （手势和按钮）+ AwayScene.qml（模型、灯光、相机）
+│                       工厂测试子页面共用的外壳；主页是 HomePage.qml
+│                       （手势和按钮）+ MascotScene.qml（模型、灯光、相机）
 │                       + PerfOverlay.qml（性能读数）
 ├── assets/
-│   └── away/          # 待机页用的 glTF 模型，git-lfs 追踪（见
+│   └── away/          # 主页用的 glTF 模型，git-lfs 追踪（见
 │                        .gitattributes）。VIO_DesktopPet.glb 是设计师
-│                        给的吉祥物模型（20 段动画）；CesiumMan.glb 是之前
+│                        给的吉祥物模型（20 段动画），actions.json 说明
+│                        各段动画的用途；CesiumMan.glb 是之前
 │                        的占位模型（Khronos glTF-Sample-Models，CC0），
 │                        文件还在仓库里，但不再打进应用（要用它得先
 │                        加回 CMakeLists.txt 的 RESOURCES）。
@@ -63,6 +68,9 @@
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_PREFIX_PATH=/opt/violoop-qt6
 cmake --build build
+
+# 单元测试
+LD_LIBRARY_PATH=/opt/violoop-qt6/lib ctest --test-dir build --output-on-failure
 
 # 离屏快速验证没有 QML 加载错误（不需要真机/GPU/kiosk），建议在上真机
 # kiosk 之前先跑一遍
@@ -91,7 +99,7 @@ sudo kill -USR1 "$(systemctl show -p MainPID --value violoop-edge-kiosk-qt)"
 截图由应用自己完成，不依赖 `weston-screenshooter`，所以在 eglfs 下也能用。
 文件不会自动清理，用完请自己删。
 
-`SIGUSR2` 是另一个命令：开始或停止待机页的性能记录，见"性能标杆"的"复现"。
+`SIGUSR2` 是另一个命令：开始或停止主页的性能记录，见"性能标杆"的"复现"。
 启动脚本在应用起来之前忽略这两个信号，所以服务刚重启时发过去只会被丢掉，
 不会把服务杀掉。
 
@@ -179,8 +187,10 @@ probe），只换启动脚本，各跑约 1 分钟：
 
 ## 性能标杆
 
-待机页（`qml/AwayPage.qml`）在真机上的基准数据，以后改模型、灯光或 Qt 版本时
-拿来对比。测于 2026-11-14 09:22–15:22，提交 `f589050`。
+3D 场景（`qml/HomePage.qml`）在真机上的基准数据，以后改模型、灯光或 Qt 版本时
+拿来对比。测于 2026-11-14 09:22–15:22，提交 `f589050`。那时这个场景在
+单独的"待机页"里（从开发菜单进），本节和"不经 weston（eglfs）"一节里说的
+待机页就是现在的主页。
 
 **测试条件**
 
@@ -278,7 +288,7 @@ GPU 负载（35%–74%），不改变帧率；去掉上限之后它们对帧率�
 
 **复现**
 
-待机页右上角一直显示实时读数。写文件默认是关的，要显式打开：
+主页右上角一直显示实时读数。写文件默认是关的，要显式打开：
 
 ```bash
 # 开始记录；再发一次停止
@@ -286,14 +296,15 @@ sudo kill -USR2 "$(systemctl show -p MainPID --value violoop-edge-kiosk-qt)"
 # -> /var/lib/violoop-edge-kiosk-qt/away-perf-<日期>-<时间>.csv
 ```
 
-列的含义见 `src/PerfRecorder.h`。只有待机页开着的时候才有数据写入；
+列的含义见 `src/PerfRecorder.h`。只有主页显示着的时候才有数据写入；
 每次开始记录都新建一个文件，用完请自己删，没有自动清理。
 
-无人值守烤机时让 kiosk 启动后直接进待机页并开始记录：
+无人值守烤机时让 kiosk 启动后就开始记录（主页就是 3D 场景，不用再指定
+页面）：
 
 ```bash
 sudo mkdir -p /etc/systemd/system/violoop-edge-kiosk-qt.service.d
-printf '[Service]\nEnvironment=EDGE_KIOSK_OPEN_PAGE=AwayPage.qml\nEnvironment=EDGE_KIOSK_RECORD_PERF=1\n' \
+printf '[Service]\nEnvironment=EDGE_KIOSK_RECORD_PERF=1\n' \
   | sudo tee /etc/systemd/system/violoop-edge-kiosk-qt.service.d/burn-in.conf
 sudo systemctl daemon-reload && sudo systemctl restart violoop-edge-kiosk-qt
 # 结束后删掉 burn-in.conf，再 daemon-reload 并重启服务

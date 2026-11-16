@@ -3,9 +3,9 @@ import QtQuick3D
 import QtQuick3D.AssetUtils
 import EdgeFrontQt.Core
 
-// The away page's 3D scene: the mascot model, loaded at run time from a
+// The home page's 3D scene: the mascot model, loaded at run time from a
 // glTF file by Quick3D's RuntimeLoader, with the designer's camera,
-// lights, probes and glass shader around it. AwayPage.qml puts the
+// lights, probes and glass shader around it. HomePage.qml puts the
 // gestures and the controls on top; this file is what stays the same
 // wherever the model is shown.
 //
@@ -79,8 +79,8 @@ View3D {
     // frame to upload the meshes). Nothing can be drawn during that, so
     // the scene first lets one frame reach the screen (loadStarted,
     // below) - in which whoever uses the scene can show a loading notice -
-    // and only then hands the loader its source. Without that the tap
-    // that opens the away page appears to do nothing for two seconds.
+    // and only then hands the loader its source. Without that the app
+    // comes up with nothing to see for two seconds.
     property string loadState: "loading"
     property bool loadStarted: false
     onModelSourceChanged: loadState = "loading"
@@ -90,7 +90,11 @@ View3D {
     property int framesToWait: 0
     Connections {
         target: scene.Window.window
-        enabled: !scene.loadStarted || scene.framesToWait > 0
+        // Only frames the scene is part of count: while it is hidden the
+        // window's frames are some other page's, and say nothing about
+        // whether the model was drawn. A scene that starts out hidden
+        // does not even load its model until it is first shown.
+        enabled: scene.visible && (!scene.loadStarted || scene.framesToWait > 0)
         function onFrameSwapped() {
             if (!scene.loadStarted) {
                 scene.loadStarted = true
@@ -252,14 +256,14 @@ View3D {
         }
         if (glassModel)
             glassModel.materials = [glassMaterial]
-        console.log("AwayScene: light rig - body", bodyModel, body ? "(by name)" : "(guessed)",
+        console.log("MascotScene: light rig - body", bodyModel, body ? "(by name)" : "(guessed)",
                     "display", displayModel, display ? "(by name)" : "(guessed)",
                     "cue", lightCue, cue ? "(by name)" : "(guessed)", "power", lightPower, "warmth", warmth,
                     "glass", glassModel, "notebook", notebookModel, "accessories", accessoryModel)
     }
 
     // The loaded model's animation clips: clips.clipNames,
-    // clips.currentClip, clips.paused, clips.play(name, fadeMs) - see
+    // clips.currentClip, clips.paused, clips.play(name, loop, fadeMs) - see
     // src/ClipPlayer.h.
     readonly property ClipPlayer clips: ClipPlayer {}
 
@@ -444,7 +448,7 @@ View3D {
                 scene.framesToWait = 600
             } else if (status === RuntimeLoader.Error) {
                 scene.loadState = "error"
-                console.error("AwayScene: RuntimeLoader failed to load", source, "-", errorString)
+                console.error("MascotScene: RuntimeLoader failed to load", source, "-", errorString)
             }
         }
     }

@@ -7,7 +7,7 @@
 
 class SystemStats;
 
-// Writes the away page's performance readout to a CSV file, one line a
+// Writes the home page's performance readout to a CSV file, one line a
 // second, for long unattended runs (burn-in): is the frame rate holding,
 // is memory creeping up, where does the temperature settle.
 //
@@ -23,7 +23,7 @@ class SystemStats;
 // qml/PerfOverlay.qml feeds it: record() on the same one-second tick
 // that updates the on-screen numbers (the overlay supplies what only the
 // page knows - frame rate and the clip playing - the rest comes from
-// SystemStats). Nothing is written while the away page is not open.
+// SystemStats). Nothing is written while the home page is not showing.
 //
 // Every start() begins a new file, away-perf-<date>-<time>.csv, in the
 // service's state directory (/var/lib/violoop-edge-kiosk-qt, or the temp

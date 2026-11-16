@@ -57,7 +57,7 @@ QList<Clip> findClips(QObject *sceneRoot)
     return clips;
 }
 
-// Same threshold as AwayScene.qml's hideCollapsedNodes(): a node scaled
+// Same threshold as MascotScene.qml's hideCollapsedNodes(): a node scaled
 // down this far is the model's way of saying "hidden".
 bool isCollapsed(const QVariant &scale)
 {
@@ -114,11 +114,18 @@ void ClipPlayer::attach(QObject *sceneRoot)
     closeLoops();
     restoreHolds();
     const auto clips = findClips(sceneRoot);
-    for (const Clip &clip : clips)
+    for (const Clip &clip : clips) {
         m_clipNames.append(clip.name);
-    emit clipNamesChanged();
+        // Timeline frames are milliseconds: the importer lays a clip out
+        // on 0..length and gives its animation that duration.
+        m_clipDurations.append(qRound(clip.timeline->property("endFrame").toReal()
+                                      - clip.timeline->property("startFrame").toReal()));
+    }
+    // Started before the clips are announced, so that whoever hears of
+    // them can already stop() it (the home page, when hidden).
     if (!m_clipNames.isEmpty())
         play(m_clipNames.first());
+    emit clipNamesChanged();
 }
 
 void ClipPlayer::detach()
@@ -127,6 +134,7 @@ void ClipPlayer::detach()
     m_sceneRoot = nullptr;
     if (!m_clipNames.isEmpty()) {
         m_clipNames.clear();
+        m_clipDurations.clear();
         emit clipNamesChanged();
     }
     if (!m_currentClip.isEmpty()) {
@@ -139,7 +147,7 @@ void ClipPlayer::detach()
     }
 }
 
-bool ClipPlayer::play(const QString &name, int fadeMs)
+bool ClipPlayer::play(const QString &name, bool loop, int fadeMs)
 {
     const auto clips = findClips(m_sceneRoot);
     const Clip *wanted = nullptr;
@@ -179,8 +187,13 @@ bool ClipPlayer::play(const QString &name, int fadeMs)
     // fade's progress read this.
     wanted->timeline->setProperty("currentFrame", wanted->timeline->property("startFrame"));
     wanted->timeline->setProperty("enabled", true);
-    if (wanted->animation)
+    if (wanted->animation) {
+        // -1 is Animation.Infinite. An animation that ran through its one
+        // loop stops on the clip's last frame, which the still enabled
+        // timeline keeps showing.
+        wanted->animation->setProperty("loops", loop ? -1 : 1);
         QMetaObject::invokeMethod(wanted->animation, "restart");
+    }
 
     if (fadeMs > 0) {
         // Only properties the old clip animated are faded. One that just
@@ -223,6 +236,20 @@ bool ClipPlayer::play(const QString &name, int fadeMs)
         emit pausedChanged();
     }
     return true;
+}
+
+void ClipPlayer::stop()
+{
+    cancelFade();
+    const auto clips = findClips(m_sceneRoot);
+    for (const Clip &clip : clips) {
+        if (clip.animation)
+            clip.animation->setProperty("running", false);
+    }
+    if (m_paused) {
+        m_paused = false;
+        emit pausedChanged();
+    }
 }
 
 void ClipPlayer::onFadeFrame()
