@@ -1,11 +1,14 @@
 #!/bin/bash
 # Production launcher for violoop-edge-kiosk-qt.service. Its default path
 # (weston) follows the same weston/seat pattern as violoop-edge-front2's
-# packaging/usr/bin/violoop-edge-kiosk-launch and this repo's own app/scripts/launch-under-weston.sh (that one is for
-# ad-hoc dev testing with env-var overrides; this is the fixed-path
-# version that actually ships in the .deb). Requires the invoking
+# packaging/usr/bin/violoop-edge-kiosk-launch. Requires the invoking
 # systemd unit's PAMName=login + TTYPath=/dev/tty7 for seat/KMS access -
 # not meant to run standalone over plain SSH.
+#
+# This is the only launcher: app/scripts/launch-dev.sh runs a locally
+# built app through this same script, by way of the EDGE_QT_BIN,
+# EDGE_QT_PREFIX and EDGE_KIOSK_WESTON_ARGS overrides below. None of them
+# is set in the shipped service.
 set -uo pipefail
 
 # SIGUSR1 and SIGUSR2 ask the app for a screenshot and to start or stop
@@ -16,8 +19,8 @@ set -uo pipefail
 # own handlers.
 trap '' USR1 USR2
 
-QT_PREFIX=/opt/violoop-qt6
-BIN=/opt/violoop-edge-kiosk-qt/violoop_edge_kiosk_qt
+QT_PREFIX="${EDGE_QT_PREFIX:-/opt/violoop-qt6}"
+BIN="${EDGE_QT_BIN:-/opt/violoop-edge-kiosk-qt/violoop_edge_kiosk_qt}"
 
 export LD_LIBRARY_PATH="$QT_PREFIX/lib:${LD_LIBRARY_PATH:-}"
 export QML2_IMPORT_PATH="$QT_PREFIX/qml:${QML2_IMPORT_PATH:-}"
@@ -97,8 +100,11 @@ transform=normal
 INI
 
 WESTON_LOG="$RUN_DIR/weston.log"
+# EDGE_KIOSK_WESTON_ARGS: extra weston options, split on spaces (the dev
+# script passes --debug).
+# shellcheck disable=SC2086
 /usr/bin/weston --config="$WESTON_INI" --shell=kiosk-shell.so \
-    --socket=wayland-0 --tty=7 --idle-time=0 \
+    --socket=wayland-0 --tty=7 --idle-time=0 ${EDGE_KIOSK_WESTON_ARGS:-} \
     >"$WESTON_LOG" 2>&1 &
 WESTON_PID=$!
 

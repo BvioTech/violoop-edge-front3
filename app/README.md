@@ -36,8 +36,8 @@ app/
 │                        的占位模型（Khronos glTF-Sample-Models，CC0），
 │                        留作轻量基准。
 ├── scripts/
-│   ├── launch-under-weston.sh   # 开发用，env var 可覆盖路径
-│   ├── launch-eglfs.sh          # 开发用，不经 weston 直接上 KMS（对比用）
+│   ├── launch-dev.sh            # 开发用：用包里的同一个启动脚本跑本地
+│   │                              构建，参数 wayland（默认）或 eglfs
 │   └── build-deb.sh              # 打包，见下
 ├── packaging/         # .deb 的 staging 内容
 └── docs/
@@ -55,9 +55,9 @@ cmake --build build
 QT_QPA_PLATFORM=offscreen timeout 5 ./build/violoop_edge_kiosk_qt
 
 # 真机：临时顶替 violoop-edge-kiosk.service 的 ExecStart
-./scripts/launch-under-weston.sh
+./scripts/launch-dev.sh
 # 或者不经 weston（见下方"不经 weston（eglfs）"）
-./scripts/launch-eglfs.sh
+./scripts/launch-dev.sh eglfs
 ```
 
 链接 `/opt/violoop-qt6`（`violoop-qt6` 包），不是系统 `qt6-*` 包——后者
@@ -92,7 +92,7 @@ weston 在这里只服务一个全屏窗口：旋转是 `qml/AppShell.qml` 自�
 
 打开方式（装好的包）：在 `/etc/violoop/kiosk-qt` 里设
 `EDGE_KIOSK_QPA=eglfs`，然后 `sudo systemctl restart violoop-edge-kiosk-qt`。
-去掉这一行就回到 weston。本地构建用 `scripts/launch-eglfs.sh`。
+去掉这一行就回到 weston。本地构建用 `scripts/launch-dev.sh eglfs`。
 
 **实测**
 
@@ -142,8 +142,8 @@ probe），只换启动脚本，各跑约 1 分钟：
 截图取的是应用自己渲染出的画面，不经过面板。
 
 逐帧耗时的取法：给服务加
-`Environment="QT_LOGGING_RULES=qt.scenegraph.time.renderloop=true"`，开发用的
-两个启动脚本都会沿用它，日志在 `$RUNTIME_DIRECTORY/app.log`。
+`Environment="QT_LOGGING_RULES=qt.scenegraph.time.renderloop=true"`，
+`scripts/launch-dev.sh` 会沿用它，日志在 `$RUNTIME_DIRECTORY/app.log`。
 
 已知的坑：`eglfs_kms` 自己选设备会选到 `/dev/dri/card1`（Mali 渲染节点）
 然后报 "no screens available"，必须指定 `card0`，启动脚本已经处理
