@@ -177,6 +177,69 @@ private slots:
         QCOMPARE(f.played(), QStringList({ "rest", "welcome!", "type" }));
     }
 
+    void conversationPhases()
+    {
+        Fixture f;
+        QSignalSpy lamp(&f.director, &MascotDirector::steadyLampChanged);
+        f.attach();
+        f.director.set(MascotDirector::Error);
+        f.director.set(MascotDirector::Conversation, "preparing");
+        f.director.set(MascotDirector::Conversation, "listening");
+        QVERIFY(f.director.steadyLamp());
+        f.director.set(MascotDirector::Conversation, "thinking");
+        QVERIFY(!f.director.steadyLamp());
+        f.director.set(MascotDirector::Conversation, "speaking");
+        QCOMPARE(f.played(), QStringList({ "rest", "error", "rest", "wait", "type", "welcome!" }));
+        // The nod once, then resting for as long as the speaking lasts.
+        QTest::qWait(clipMs * 3);
+        QCOMPARE(f.played().mid(6), QStringList({ "rest" }));
+        // The next turn nods again.
+        f.director.set(MascotDirector::Conversation, "listening");
+        f.director.set(MascotDirector::Conversation, "speaking");
+        QCOMPARE(f.played().mid(7), QStringList({ "wait", "welcome!" }));
+        // Cut short by the end of the conversation.
+        f.director.clear(MascotDirector::Conversation);
+        QCOMPARE(f.played().last(), QString("error"));
+        QTest::qWait(clipMs * 2);
+        QCOMPARE(f.played().last(), QString("error"));
+        QCOMPARE(lamp.size(), 4);
+    }
+
+    void thinkingUsesTheGoalsWorkClip()
+    {
+        Fixture f;
+        f.attach();
+        f.director.set(MascotDirector::Working, "goal-1");
+        f.director.set(MascotDirector::Working, "goal-2");
+        f.director.set(MascotDirector::Conversation, "listening");
+        f.director.set(MascotDirector::Conversation, "thinking");
+        f.director.clear(MascotDirector::Conversation);   // the same clip: carries on
+        QCOMPARE(f.played(), QStringList({ "rest", "type", "read", "wait", "read" }));
+    }
+
+    void noTouchesInAConversation()
+    {
+        Fixture f;
+        f.attach();
+        f.director.set(MascotDirector::Conversation, "preparing");
+        f.director.cue(MascotDirector::TouchLeft);
+        f.director.set(MascotDirector::Working, "goal-1");
+        f.director.cue(MascotDirector::Done);
+        QCOMPARE(f.played(), QStringList({ "rest" }));
+    }
+
+    void steadyLampGoesWithTheStage()
+    {
+        Fixture f;
+        f.attach();
+        f.director.set(MascotDirector::Conversation, "listening");
+        QVERIFY(f.director.steadyLamp());
+        f.director.stageDetached();
+        QVERIFY(!f.director.steadyLamp());
+        f.attach();
+        QVERIFY(f.director.steadyLamp());
+    }
+
     void manualLoopsWhateverWasPicked()
     {
         Fixture f;

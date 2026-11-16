@@ -19,6 +19,8 @@ MascotInputs::MascotInputs(MascotDirector *director, int pollMs, QObject *parent
             emit snapshotWanted(authorizationPath());
         if (m_goalActive)
             emit snapshotWanted(goalPath());
+        if (m_conversing)
+            emit snapshotWanted(conversationPath());
     });
 }
 
@@ -38,6 +40,7 @@ void MascotInputs::eventsConnected()
     // Whatever happened while the stream was down was not replayed.
     emit snapshotWanted(authorizationPath());
     emit snapshotWanted(goalPath());
+    emit snapshotWanted(conversationPath());
 }
 
 void MascotInputs::eventReceived(const QString &type, const QString &data)
@@ -60,6 +63,10 @@ void MascotInputs::eventReceived(const QString &type, const QString &data)
         if (event.value(QLatin1String("state")).toString() == QLatin1String("done"))
             m_director->cue(MascotDirector::Done);
         setGoal(event.value(QLatin1String("active")).toObject());
+    } else if (type == QLatin1String("realtime:state")) {
+        const QJsonObject event = QJsonDocument::fromJson(data.toUtf8()).object();
+        if (!event.isEmpty())
+            setConversation(event.value(QLatin1String("state")).toString());
     }
 }
 
@@ -67,10 +74,16 @@ void MascotInputs::snapshotReceived(const QString &path, int statusCode, const Q
 {
     // No answer, or an error (503 while violoop-edge starts): it is down
     // or was restarted, and neither its authorization requests nor its
-    // goals survive that.
-    QJsonObject active;
+    // goals nor a voice session survive that.
+    QJsonObject reply;
     if (statusCode == 200)
-        active = QJsonDocument::fromJson(body.toUtf8()).object().value(QLatin1String("active")).toObject();
+        reply = QJsonDocument::fromJson(body.toUtf8()).object();
+    if (path == conversationPath()) {
+        // Without a session: {"mode":"idle"}, no `state`.
+        setConversation(reply.value(QLatin1String("state")).toString());
+        return;
+    }
+    const QJsonObject active = reply.value(QLatin1String("active")).toObject();
     if (path == authorizationPath())
         setWaiting(!active.isEmpty(), active.value(QLatin1String("context")).toString());
     else if (path == goalPath())
@@ -106,9 +119,38 @@ void MascotInputs::setGoal(const QJsonObject &active)
     updatePoll();
 }
 
+// `state`: a phase of violoop-edge's realtime voice session, or empty or
+// "ended" for none.
+void MascotInputs::pinConversation(const QString &state)
+{
+    m_conversationPinned = false;
+    setConversation(state);
+    m_conversationPinned = true;
+    m_conversing = false; // nothing to ask the backend about
+    updatePoll();
+}
+
+void MascotInputs::setConversation(const QString &state)
+{
+    if (m_conversationPinned)
+        return;
+    m_conversing = !state.isEmpty() && state != QLatin1String("ended");
+    if (!m_conversing) {
+        m_director->clear(MascotDirector::Conversation);
+    } else {
+        QString phase = QStringLiteral("preparing");
+        if (state == QLatin1String("listening") || state == QLatin1String("speaking"))
+            phase = state;
+        else if (state == QLatin1String("thinking") || state == QLatin1String("working"))
+            phase = QStringLiteral("thinking");
+        m_director->set(MascotDirector::Conversation, phase);
+    }
+    updatePoll();
+}
+
 void MascotInputs::updatePoll()
 {
-    const bool wanted = m_waiting || m_goalActive;
+    const bool wanted = m_waiting || m_goalActive || m_conversing;
     if (wanted && !m_poll.isActive())
         m_poll.start();
     else if (!wanted)

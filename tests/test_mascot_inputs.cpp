@@ -18,11 +18,11 @@ private:
     struct Fixture
     {
         MascotDirector director { QJsonDocument::fromJson(R"({
-            "once": ["done"],
+            "once": ["done", "welcome"],
             "idle": { "base": "rest" },
             "work": ["type", "read"],
             "conditions": { "offline": "offline", "error": "error", "waiting_user": "wait" },
-            "cues": { "done": ["done"] }
+            "cues": { "done": ["done"], "welcome": ["welcome"] }
         })").object() };
         MascotInputs inputs { &director, pollMs };
         QSignalSpy played { &director, &MascotDirector::directive };
@@ -30,8 +30,8 @@ private:
 
         Fixture()
         {
-            director.stageAttached({ "rest", "offline", "wait", "type", "read", "error", "done" },
-                                   { 250, 250, 250, 250, 250, 250, 250 });
+            director.stageAttached({ "rest", "offline", "wait", "type", "read", "error", "done", "welcome" },
+                                   { 250, 250, 250, 250, 250, 250, 250, 250 });
         }
         QString clip() const { return played.last().at(0).toString(); }
         void authorizationEvent(const QString &state, const QString &reason = QString())
@@ -91,6 +91,7 @@ private slots:
         f.inputs.eventsConnected();
         QCOMPARE(f.asked(MascotInputs::authorizationPath()), 1);
         QCOMPARE(f.asked(MascotInputs::goalPath()), 1);
+        QCOMPARE(f.asked(MascotInputs::conversationPath()), 1);
         f.authorization(200, pending());
         QCOMPARE(f.clip(), QString("wait"));
     }
@@ -222,6 +223,57 @@ private slots:
         QCOMPARE(f.clip(), QString("wait"));
         f.authorization(200, none());
         QCOMPARE(f.clip(), QString("type"));
+    }
+
+    void conversationFollowsThePhases()
+    {
+        Fixture f;
+        auto phase = [&f](const QString &state) {
+            f.inputs.eventReceived("realtime:state",
+                                   QStringLiteral(R"({"type":"realtime:state","state":"%1","runId":"r"})").arg(state));
+        };
+        phase("connecting");
+        QCOMPARE(f.played.size(), 1);   // the resting clip just carries on
+        phase("listening");
+        QCOMPARE(f.clip(), QString("wait"));
+        QVERIFY(f.director.steadyLamp());
+        phase("thinking");
+        QCOMPARE(f.clip(), QString("type"));
+        QVERIFY(!f.director.steadyLamp());
+        phase("working");               // a tool running: still thinking
+        QCOMPARE(f.clip(), QString("type"));
+        phase("speaking");
+        QCOMPARE(f.clip(), QString("welcome"));
+        QTRY_COMPARE(f.clip(), QString("rest"));
+        phase("ended");
+        QCOMPARE(f.played.size(), 5);
+        QTRY_VERIFY(f.asked(MascotInputs::conversationPath()) >= 1);
+        const qsizetype asked = f.wanted.size();
+        QTest::qWait(pollMs * 3);
+        QCOMPARE(f.wanted.size(), asked);
+    }
+
+    void conversationSnapshot()
+    {
+        Fixture f;
+        f.inputs.snapshotReceived(MascotInputs::conversationPath(), 200,
+                                  R"({"mode":"realtime","state":"listening","connectedMs":1})");
+        QCOMPARE(f.clip(), QString("wait"));
+        f.inputs.snapshotReceived(MascotInputs::conversationPath(), 200, R"({"mode":"idle"})");
+        QCOMPARE(f.clip(), QString("rest"));
+    }
+
+    void conversationOutranksTheGoal()
+    {
+        Fixture f;
+        f.goalEvent("working", working("g1"));
+        f.inputs.eventReceived("realtime:state", R"({"state":"listening"})");
+        QCOMPARE(f.clip(), QString("wait"));
+        // No confetti into the conversation.
+        f.goalEvent("done", "null");
+        QCOMPARE(f.clip(), QString("wait"));
+        f.inputs.eventReceived("realtime:state", R"({"state":"ended"})");
+        QCOMPARE(f.clip(), QString("rest"));
     }
 
     void offlineOutranksWaiting()

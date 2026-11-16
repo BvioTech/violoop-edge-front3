@@ -137,21 +137,82 @@ View3D {
     // node that has meshes under it, switching back on the moment a clip
     // scales the node up again.
     function hideCollapsedNodes() {
+        const lamps = []
+        let steady = null
         function visit(node) {
             let hasMesh = node instanceof Model
             for (let i = 0; i < node.children.length; ++i)
                 hasMesh = visit(node.children[i]) || hasMesh
             if (hasMesh && node !== loader) {
+                const lamp = scene.lampKind(node)
                 const update = function() {
                     const s = node.scale
-                    node.visible = Math.max(Math.abs(s.x), Math.abs(s.y), Math.abs(s.z)) > 0.001
+                    node.visible = !(lamp && scene.steadyLamp)
+                        && Math.max(Math.abs(s.x), Math.abs(s.y), Math.abs(s.z)) > 0.001
                 }
                 node.scaleChanged.connect(update)
                 update()
+                if (lamp) {
+                    lamps.push(update)
+                    if (lamp === "cool4")
+                        steady = node
+                }
             }
             return hasMesh
         }
         visit(loader)
+        lampUpdates = lamps
+        steadyLampHolder = steady
+        console.log("MascotScene: lamps -", lamps.length, "banks, steady cyan", steady)
+        applySteadyLamp()
+    }
+
+    // The lamp band. The model has one mesh per colour and brightness
+    // step (cyan 1 and 4, warm 2 to 8, grey 0), each under a holder node
+    // of its own, and its clips scale up the holder of the one to show -
+    // which hideCollapsedNodes() turns into visibility. The holders are
+    // marked by their position, as in the designer's qt/VioModel.qml: z
+    // is 0.000312, x says which one it is.
+    //
+    // steadyLamp overrides the clip: the lamp is steady cyan (step 4)
+    // whatever the clip says, and lightPower/warmth - the lights, the
+    // face, the glass - read as the normal state. For the one case where
+    // a clip's motion is wanted without its lamp: the "waiting_user" clip
+    // stands in for listening in a voice conversation, and its warm
+    // breathing lamp means "your approval is needed" (set by the home
+    // page from MascotDirector::steadyLamp).
+    //
+    // The clip keeps scaling the holders all the while, so for the
+    // override the cyan mesh is taken out of its holder and put next to
+    // it (the holder's own offset is the marker, a fraction of a
+    // millimetre), and all holders are hidden.
+    property bool steadyLamp: false
+    property var lampUpdates: []
+    property Node steadyLampHolder: null
+    property Node steadyLampMesh: null
+    onSteadyLampChanged: applySteadyLamp()
+
+    // "" for a node that is not a lamp holder, else e.g. "cool4",
+    // "warm6", "off0".
+    function lampKind(node) {
+        if (node instanceof Model || Math.abs(node.z - 0.000312) > 0.000001
+                || node.children.length === 0 || !(node.children[0] instanceof Model))
+            return ""
+        if (node.x > 0.001)
+            return "off0"
+        return (node.x < 0 ? "warm" : "cool") + (Math.round(Math.abs(node.x) / 0.00005) - 1)
+    }
+
+    function applySteadyLamp() {
+        for (let i = 0; i < lampUpdates.length; ++i)
+            lampUpdates[i]()
+        if (steadyLamp && steadyLampHolder && !steadyLampMesh) {
+            steadyLampMesh = steadyLampHolder.children[0]
+            steadyLampMesh.parent = steadyLampHolder.parent
+        } else if (!steadyLamp && steadyLampMesh) {
+            steadyLampMesh.parent = steadyLampHolder
+            steadyLampMesh = null
+        }
     }
 
     // What the lights and the glass need from the loaded model (see the
@@ -182,8 +243,8 @@ View3D {
     property Model notebookModel: null
     property Model accessoryModel: null
     property Node lightCue: null
-    readonly property real lightPower: lightCue ? lightCue.x : 0.5
-    readonly property real warmth: lightCue ? lightCue.y : 0
+    readonly property real lightPower: lightCue && !steadyLamp ? lightCue.x : 0.5
+    readonly property real warmth: lightCue && !steadyLamp ? lightCue.y : 0
     readonly property bool offline: warmth < -0.5
     readonly property color spill: offline ? Qt.rgba(0.10, 0.11, 0.12, 1)
                                            : Qt.rgba(0.04 + 0.96 * warmth, 0.84 - 0.58 * warmth, 0.94 - 0.91 * warmth, 1)
@@ -440,6 +501,9 @@ View3D {
             scene.notebookModel = null
             scene.accessoryModel = null
             scene.lightCue = null
+            scene.lampUpdates = []
+            scene.steadyLampHolder = null
+            scene.steadyLampMesh = null
             scene.clips.detach()
             if (status === RuntimeLoader.Success) {
                 scene.findRig()

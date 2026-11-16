@@ -12,8 +12,9 @@ QString conditionKey(MascotDirector::Condition condition)
     case MascotDirector::Error: return QStringLiteral("error");
     case MascotDirector::WaitingUser: return QStringLiteral("waiting_user");
     case MascotDirector::Manual:
+    case MascotDirector::Conversation:
     case MascotDirector::Working:
-        break; // not looked up by key, see conditionClip()
+        break; // not looked up by key, see conditionChoice()
     }
     return QString();
 }
@@ -102,6 +103,7 @@ void MascotDirector::stageDetached()
     m_timer.stop();
     m_pausedRemaining = -1;
     m_paused = false;
+    resolve();
 }
 
 void MascotDirector::stagePaused(bool paused)
@@ -123,6 +125,18 @@ void MascotDirector::stagePaused(bool paused)
 // already playing.
 void MascotDirector::resolve()
 {
+    resolveClip();
+    const bool steady = m_mode == FollowingCondition && !m_conditions.isEmpty()
+        && m_conditions.firstKey() == Conversation
+        && m_conditions.first() == QLatin1String("listening");
+    if (steady != m_steadyLamp) {
+        m_steadyLamp = steady;
+        emit steadyLampChanged();
+    }
+}
+
+void MascotDirector::resolveClip()
+{
     if (!m_attached || m_catalog.idleBase.isEmpty())
         return;
     if (m_mode == Reacting && !m_interruptible)
@@ -130,10 +144,13 @@ void MascotDirector::resolve()
 
     if (!m_conditions.isEmpty()) {
         const Condition top = m_conditions.firstKey();
-        const QString clip = conditionClip(top);
-        if (m_mode == FollowingCondition && clip == m_clip)
+        const Choice choice = conditionChoice(top);
+        const QString following = choice.clip + QLatin1Char('\n') + choice.after;
+        if (m_mode == FollowingCondition && following == m_following)
             return;
-        start(FollowingCondition, clip, top == Manual || !m_catalog.once.contains(clip), false);
+        m_following = following;
+        m_after = choice.after;
+        start(FollowingCondition, choice.clip, choice.loop, !choice.after.isEmpty());
         return;
     }
     if (m_mode == Reacting || m_mode == Idling)
@@ -178,23 +195,48 @@ void MascotDirector::onTimeout()
     if (m_mode == Reacting) {
         m_mode = Stopped;
         resolve();
+    } else if (m_mode == FollowingCondition && !m_after.isEmpty()) {
+        const QString next = m_after;
+        m_after.clear();
+        start(FollowingCondition, next, true, false);
     } else if (m_mode == Idling) {
         m_inInterlude = !m_inInterlude;
         start(Idling, m_inInterlude ? nextInterlude() : m_catalog.idleBase, true, true);
     }
 }
 
-QString MascotDirector::conditionClip(Condition condition)
+MascotDirector::Choice MascotDirector::conditionChoice(Condition condition)
 {
-    QString clip;
-    if (condition == Manual)
-        clip = m_conditions.value(Manual);
-    else if (condition == Working)
-        clip = workClip(m_conditions.value(Working));
-    else
-        clip = m_catalog.conditionClips.value(conditionKey(condition));
+    Choice choice;
+    if (condition == Manual) {
+        choice.clip = m_conditions.value(Manual);
+    } else if (condition == Working) {
+        choice.clip = workClip(m_conditions.value(Working));
+    } else if (condition == Conversation) {
+        const QString phase = m_conditions.value(Conversation);
+        if (phase == QLatin1String("listening")) {
+            choice.clip = m_catalog.conditionClips.value(conditionKey(WaitingUser));
+        } else if (phase == QLatin1String("thinking")) {
+            choice.clip = m_conditions.contains(Working) ? workClip(m_conditions.value(Working))
+                                                         : m_catalog.workClips.value(0);
+        } else if (phase == QLatin1String("speaking")) {
+            const QString nod = m_catalog.cueClips.value(cueKey(Welcome)).value(0);
+            if (m_durations.contains(nod)) {
+                choice.clip = nod;
+                choice.loop = false;
+                choice.after = m_catalog.idleBase;
+            }
+        }
+        if (choice.clip.isEmpty())
+            choice.clip = m_catalog.idleBase;
+    } else {
+        choice.clip = m_catalog.conditionClips.value(conditionKey(condition));
+        choice.loop = !m_catalog.once.contains(choice.clip);
+    }
     // A model without a clip for this shows its resting clip instead.
-    return m_durations.contains(clip) ? clip : m_catalog.idleBase;
+    if (!m_durations.contains(choice.clip))
+        choice = { m_catalog.idleBase, true, QString() };
+    return choice;
 }
 
 QString MascotDirector::workClip(const QString &goal)

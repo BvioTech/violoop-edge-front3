@@ -39,6 +39,11 @@ class MascotDirector;
 //     Every event carries `active`, so an event is as good as a snapshot.
 //     `done` is the one thing that is only ever an event: it throws the
 //     confetti, once, and is never made up for afterwards.
+//   - Conversation: the realtime voice session's phase (`realtime:state`
+//     events, GET /audio/realtime/status): connecting is "preparing",
+//     thinking and working (a tool running) are both "thinking",
+//     listening and speaking are themselves. `ended`, or no session in
+//     the snapshot, ends it.
 class MascotInputs : public QObject
 {
     Q_OBJECT
@@ -50,6 +55,7 @@ public:
 
     static QString authorizationPath() { return QStringLiteral("/sign/authorize-status"); }
     static QString goalPath() { return QStringLiteral("/status/goal"); }
+    static QString conversationPath() { return QStringLiteral("/audio/realtime/status"); }
 
     // A cloud probe came back.
     void connectivityProbed(bool ok);
@@ -63,6 +69,10 @@ public:
     // Answers for other paths are ignored.
     void snapshotReceived(const QString &path, int statusCode, const QString &body);
 
+    // Shows this phase of a voice session (the backend's name for it)
+    // from now on, whatever the backend says. For trying the phases out.
+    void pinConversation(const QString &state);
+
 signals:
     // Somebody please GET `path` and report back.
     void snapshotWanted(const QString &path);
@@ -70,11 +80,14 @@ signals:
 private:
     void setWaiting(bool waiting, const QString &request = QString());
     void setGoal(const QJsonObject &active);
+    void setConversation(const QString &state);
     void updatePoll();
 
     MascotDirector *m_director;
     int m_failedProbes = 0;
     bool m_waiting = false;
     bool m_goalActive = false;
+    bool m_conversing = false;
+    bool m_conversationPinned = false;
     QTimer m_poll;
 };

@@ -68,6 +68,7 @@ Item {
     MascotScene {
         id: scene
         anchors.fill: parent
+        steadyLamp: mascot.steadyLamp
 
         // A tap pokes the mascot: on its left, its right, or in the
         // middle. The position is in the View3D's own coordinates, not in
