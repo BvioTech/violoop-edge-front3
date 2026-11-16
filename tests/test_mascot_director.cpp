@@ -6,14 +6,15 @@
 #include "../src/MascotDirector.h"
 
 // MascotDirector as a black box: conditions, cues and stage reports go
-// in, the sequence of directives comes out. Clips are 60 ms long so that
-// the director's own timing can be waited for.
+// in, the sequence of directives comes out. Clips are 250 ms long - short,
+// so that the director's own timing can be waited for, but not shorter
+// than its cross-fade, below which it stops taking lengths at face value.
 class TestMascotDirector : public QObject
 {
     Q_OBJECT
 
 private:
-    static constexpr int clipMs = 60;
+    static constexpr int clipMs = 250;
 
     static QJsonObject manifest()
     {
@@ -44,11 +45,11 @@ private:
             // Always the first of the interludes on offer.
             director.setPicker([](int) { return 0; });
         }
-        void attach(const QStringList &clips = allClips())
+        void attach(const QStringList &clips = allClips(), int ms = clipMs)
         {
             QVariantList durations;
             for (qsizetype i = 0; i < clips.size(); ++i)
-                durations.append(clipMs);
+                durations.append(ms);
             director.stageAttached(clips, durations);
         }
         // The clips asked for so far, "!" appended to those played once.
@@ -76,7 +77,8 @@ private slots:
         f.attach();
         // The picker always takes the first choice, and the interlude
         // that played last is not among the choices.
-        QTRY_COMPARE(f.played(), QStringList({ "rest", "play", "rest", "nap", "rest", "play" }));
+        // (The list keeps growing, so only its start can be compared.)
+        QTRY_COMPARE(f.played().mid(0, 6), QStringList({ "rest", "play", "rest", "nap", "rest", "play" }));
     }
 
     void highestConditionWins()
@@ -220,6 +222,32 @@ private slots:
         QCOMPARE(f.played(), QStringList({ "rest" }));
         f.director.stagePaused(false);
         QTRY_COMPARE(f.played().mid(0, 2), QStringList({ "rest", "play" }));
+    }
+
+    void manualRestThenIdleRestartsThePausedClip()
+    {
+        // The resting clip, picked by hand (it just carries on) and
+        // paused. Handing the choice back asks for the same clip again,
+        // but this time it must be sent out: that is what takes the stage
+        // out of pause and starts the round.
+        Fixture f;
+        f.attach();
+        f.director.set(MascotDirector::Manual, "rest");
+        f.director.stagePaused(true);
+        f.director.clear(MascotDirector::Manual);
+        QCOMPARE(f.played(), QStringList({ "rest", "rest" }));
+    }
+
+    void posesAreNotTimedByTheirLength()
+    {
+        // Clips of length 0: an idle round lasts poseRoundMs instead, a
+        // reaction as long as the cross-fade.
+        Fixture f;
+        f.attach(allClips(), 0);
+        QTest::qWait(MascotDirector::fadeMs * 2);
+        QCOMPARE(f.played(), QStringList({ "rest" }));
+        f.director.cue(MascotDirector::TouchLeft);
+        QTRY_COMPARE(f.played(), QStringList({ "rest", "touch.l!", "rest" }));
     }
 
     void modelWithOtherClips()

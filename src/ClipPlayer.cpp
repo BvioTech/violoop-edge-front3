@@ -121,9 +121,11 @@ void ClipPlayer::attach(QObject *sceneRoot)
         m_clipDurations.append(qRound(clip.timeline->property("endFrame").toReal()
                                       - clip.timeline->property("startFrame").toReal()));
     }
-    emit clipNamesChanged();
+    // Started before the clips are announced, so that whoever hears of
+    // them can already stop() it (the home page, when hidden).
     if (!m_clipNames.isEmpty())
         play(m_clipNames.first());
+    emit clipNamesChanged();
 }
 
 void ClipPlayer::detach()

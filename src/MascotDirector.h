@@ -95,6 +95,9 @@ public:
 
     // Length of the cross-fade every directive asks for.
     static constexpr int fadeMs = 225;
+    // How long an idle round lasts when its clip is shorter than the
+    // cross-fade, i.e. is a pose rather than a motion.
+    static constexpr int poseRoundMs = 4000;
 
 signals:
     // Play `clip` now, looping or once (then holding its last frame),
@@ -135,6 +138,7 @@ private:
     int m_workCursor = 0;
 
     QTimer m_timer;
+    bool m_paused = false;
     // Left on the clock when the stage was paused, -1 when not paused or
     // nothing was being timed.
     int m_pausedRemaining = -1;

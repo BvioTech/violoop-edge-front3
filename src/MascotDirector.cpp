@@ -101,10 +101,12 @@ void MascotDirector::stageDetached()
     m_clip.clear();
     m_timer.stop();
     m_pausedRemaining = -1;
+    m_paused = false;
 }
 
 void MascotDirector::stagePaused(bool paused)
 {
+    m_paused = paused;
     if (paused) {
         if (m_timer.isActive()) {
             m_pausedRemaining = m_timer.remainingTime();
@@ -144,18 +146,28 @@ void MascotDirector::start(Mode mode, const QString &clip, bool loop, bool timed
 {
     // A looping clip that is asked for again, for another reason (the
     // resting clip standing in for a condition the model has no clip
-    // for), just carries on.
-    const bool carriesOn = loop && m_looping && clip == m_clip;
+    // for), just carries on. Not when it is about to be timed - a round
+    // is counted from the clip's start - and not when the stage is
+    // paused: a directive is what gets it going again.
+    const bool carriesOn = loop && m_looping && clip == m_clip && !timed && !m_paused;
     m_mode = mode;
     m_clip = clip;
     m_looping = loop;
     m_pausedRemaining = -1;
-    if (timed)
-        m_timer.start(m_durations.value(clip));
-    else
+    if (timed) {
+        // A clip too short to time (a single pose is 0 ms long) must not
+        // turn this into a busy loop of directives.
+        int duration = m_durations.value(clip);
+        if (duration < fadeMs)
+            duration = mode == Idling ? poseRoundMs : fadeMs;
+        m_timer.start(duration);
+    } else {
         m_timer.stop();
+    }
     if (carriesOn)
         return;
+    // Playing a clip takes the stage out of pause.
+    m_paused = false;
     qDebug() << "MascotDirector:" << clip << (loop ? "(loop)" : "(once)");
     emit directive(clip, loop, fadeMs);
 }

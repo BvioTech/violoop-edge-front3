@@ -30,18 +30,23 @@ import EdgeFrontQt.Core
 Item {
     id: root
 
-    // Whether a clip picked by hand is overriding the director's choice.
+    // Whether a clip picked by hand is overriding the director's choice,
+    // and which one was picked last.
     property bool manual: false
+    property string manualClip: ""
 
     // Picks the next (or previous) clip by hand; it loops until another
-    // is picked or `manual` is switched off.
+    // is picked or `manual` is switched off. Counted from the clip picked
+    // last, not from the one playing: a pick made during a touch reaction
+    // only takes effect once that is over.
     function stepClip(delta) {
         const names = scene.clips.clipNames
         if (names.length === 0)
             return
-        const i = names.indexOf(scene.clips.currentClip)
+        const i = names.indexOf(manual ? manualClip : scene.clips.currentClip)
+        manualClip = names[(i + delta + names.length) % names.length]
         manual = true
-        mascot.set(Mascot.Manual, names[(i + delta + names.length) % names.length])
+        mascot.set(Mascot.Manual, manualClip)
     }
 
     onManualChanged: {
@@ -69,10 +74,15 @@ Item {
             }
         } else {
             mascot.stageDetached()
-            scene.clips.stop()
             if (scene.loadState !== "ready")
                 welcomed = false
         }
+    }
+    // Hidden, the clips stop - also when the page is hidden before the
+    // model ever got on stage (the tap on "开发" during the load).
+    onVisibleChanged: {
+        if (!visible)
+            scene.clips.stop()
     }
     Connections {
         target: scene.clips
@@ -152,8 +162,15 @@ Item {
         // A tap (a touch that does not turn into a drag) pokes the mascot:
         // on its left, its right, or in the middle. Position in the
         // View3D's own coordinates, for the reason given above.
+        //
+        // The buttons lie over the scene, and a tap on one of them can
+        // reach this handler as well (it only watches, it does not take
+        // the touch away from anybody). Those are not pokes.
         TapHandler {
             onTapped: function(point) {
+                const over = root.childAt(point.position.x, point.position.y)
+                if (over !== scene && !(over instanceof Text))
+                    return
                 const x = point.position.x
                 mascot.cue(x < scene.width / 3 ? Mascot.TouchLeft
                            : x > scene.width * 2 / 3 ? Mascot.TouchRight : Mascot.TouchMiddle)

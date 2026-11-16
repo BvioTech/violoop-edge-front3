@@ -43,6 +43,7 @@ Text {
 
     Connections {
         target: overlay.Window.window
+        enabled: overlay.visible
         function onFrameSwapped() { overlay.framesSwapped += 1 }
     }
     Timer {

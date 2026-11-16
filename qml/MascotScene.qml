@@ -90,7 +90,11 @@ View3D {
     property int framesToWait: 0
     Connections {
         target: scene.Window.window
-        enabled: !scene.loadStarted || scene.framesToWait > 0
+        // Only frames the scene is part of count: while it is hidden the
+        // window's frames are some other page's, and say nothing about
+        // whether the model was drawn. A scene that starts out hidden
+        // does not even load its model until it is first shown.
+        enabled: scene.visible && (!scene.loadStarted || scene.framesToWait > 0)
         function onFrameSwapped() {
             if (!scene.loadStarted) {
                 scene.loadStarted = true
@@ -259,7 +263,7 @@ View3D {
     }
 
     // The loaded model's animation clips: clips.clipNames,
-    // clips.currentClip, clips.paused, clips.play(name, fadeMs) - see
+    // clips.currentClip, clips.paused, clips.play(name, loop, fadeMs) - see
     // src/ClipPlayer.h.
     readonly property ClipPlayer clips: ClipPlayer {}
 
