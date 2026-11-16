@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           lfs: true
-          # Without this, app/assets/away/CesiumMan.glb (tracked via
+          # Without this, app/assets/away/VIO_DesktopPet.glb (tracked via
           # git-lfs, see ../../.gitattributes) checks out as a tiny LFS
           # pointer stub instead of real glTF bytes - CMake's RESOURCES
           # step would embed the stub as-is (no error), and the offscreen

@@ -71,10 +71,6 @@ qt_add_qml_module(violoop_edge_kiosk_qt
         # qt3d-spike's assets: it ships inside the installed app, so it has
         # to be a real committed asset, not a dev-time-only download.
         assets/away/VIO_DesktopPet.glb
-        # The placeholder the page used before that (Khronos
-        # glTF-Sample-Models' CesiumMan, CC0). Kept as the lightweight
-        # baseline every real-hardware number so far was measured with.
-        assets/away/CesiumMan.glb
         # The designer's scene resources for qml/AwayPage.qml, as shipped
         # in their package's qt/ folder: the environment light probe, the
         # face's own probe, the panorama the visor glass reflects, and the

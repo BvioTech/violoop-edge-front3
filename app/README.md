@@ -39,7 +39,8 @@ app/
 │                        ../.gitattributes）。VIO_DesktopPet.glb 是设计师
 │                        给的吉祥物模型（19 段动画）；CesiumMan.glb 是之前
 │                        的占位模型（Khronos glTF-Sample-Models，CC0），
-│                        留作轻量基准。
+│                        文件还在仓库里，但不再打进应用（要用它得先
+│                        加回 CMakeLists.txt 的 RESOURCES）。
 ├── scripts/
 │   ├── launch-dev.sh            # 开发用：用包里的同一个启动脚本跑本地
 │   │                              构建，参数 wayland（默认）或 eglfs
