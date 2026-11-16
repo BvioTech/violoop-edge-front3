@@ -36,9 +36,12 @@ class MascotDirector;
 //     events, GET /status/goal). A goal is one thing the user asked for
 //     that takes doing; `active` in the event and in the snapshot is the
 //     goal being worked on, or the failure nobody has dealt with yet.
-//     Every event carries `active`, so an event is as good as a snapshot.
-//     `done` is the one thing that is only ever an event: it throws the
-//     confetti, once, and is never made up for afterwards.
+//     Every event carries what the snapshot has, so an event is as good
+//     as a snapshot. `last` in both is the goal that ended last: when
+//     that is a `done` not seen before, the confetti is thrown - so a
+//     `done` event that got lost is made up for by the next snapshot.
+//     Not by the first one after the app started, though: what that
+//     shows ended before anybody was looking.
 //   - Conversation: the realtime voice session's phase (`realtime:state`
 //     events, GET /audio/realtime/status): connecting is "preparing",
 //     thinking and working (a tool running) are both "thinking",
@@ -80,6 +83,7 @@ signals:
 private:
     void setWaiting(bool waiting, const QString &request = QString());
     void setGoal(const QJsonObject &active);
+    bool noteLastGoal(const QJsonObject &last);
     void setConversation(const QString &state);
     void updatePoll();
 
@@ -87,6 +91,10 @@ private:
     int m_failedProbes = 0;
     bool m_waiting = false;
     bool m_goalActive = false;
+    // The goal that ended last, as far as it has been seen (its id and
+    // the time it ended), and whether anything has been seen at all.
+    QString m_lastGoal;
+    bool m_lastGoalKnown = false;
     bool m_conversing = false;
     bool m_conversationPinned = false;
     QTimer m_poll;

@@ -58,9 +58,17 @@ void MascotInputs::eventReceived(const QString &type, const QString &data)
         const QJsonObject event = QJsonDocument::fromJson(data.toUtf8()).object();
         if (event.isEmpty())
             return;
+        const bool done = event.value(QLatin1String("state")).toString() == QLatin1String("done");
+        // Before the first snapshot there is nothing to compare `last`
+        // with: then only a `done` event is known to be news. (And a
+        // violoop-edge that does not send `last` yet has only the event.)
+        const bool known = m_lastGoalKnown;
+        bool celebrate = noteLastGoal(event.value(QLatin1String("last")).toObject());
+        if (!known || !event.contains(QLatin1String("last")))
+            celebrate = done;
         // The cue first: it ends the goal that was being shown, and what
         // `active` says then only takes over once the confetti is down.
-        if (event.value(QLatin1String("state")).toString() == QLatin1String("done"))
+        if (celebrate)
             m_director->cue(MascotDirector::Done);
         setGoal(event.value(QLatin1String("active")).toObject());
     } else if (type == QLatin1String("realtime:state")) {
@@ -86,8 +94,13 @@ void MascotInputs::snapshotReceived(const QString &path, int statusCode, const Q
     const QJsonObject active = reply.value(QLatin1String("active")).toObject();
     if (path == authorizationPath())
         setWaiting(!active.isEmpty(), active.value(QLatin1String("context")).toString());
-    else if (path == goalPath())
+    else if (path == goalPath()) {
+        // The first snapshot only says where things stand.
+        const bool known = m_lastGoalKnown;
+        if (statusCode == 200 && noteLastGoal(reply.value(QLatin1String("last")).toObject()) && known)
+            m_director->cue(MascotDirector::Done);
         setGoal(active);
+    }
 }
 
 void MascotInputs::setWaiting(bool waiting, const QString &request)
@@ -146,6 +159,22 @@ void MascotInputs::setConversation(const QString &state)
         m_director->set(MascotDirector::Conversation, phase);
     }
     updatePoll();
+}
+
+// `last`: as in GET /status/goal - empty, or the goal that ended last.
+// Remembers it; true when it is one that was completed and that has not
+// been seen before.
+bool MascotInputs::noteLastGoal(const QJsonObject &last)
+{
+    m_lastGoalKnown = true;
+    if (last.isEmpty())
+        return false;
+    const QString key = last.value(QLatin1String("goalId")).toString() + QLatin1Char('\n')
+        + QString::number(last.value(QLatin1String("time")).toDouble(), 'f', 0);
+    if (key == m_lastGoal)
+        return false;
+    m_lastGoal = key;
+    return last.value(QLatin1String("state")).toString() == QLatin1String("done");
 }
 
 void MascotInputs::updatePoll()

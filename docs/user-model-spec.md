@@ -59,8 +59,10 @@
     `GET /status/goal` 快照，协议见 `../../device/docs/protocols/
     local-http-events.md` §3.2a）。事件里带的 `active` 和快照同形，直接
     当快照用：`working` → 工作（目标 id 决定用哪段工作动画），`failed` →
-    异常，空 → 都清掉。`done` 事件另外撒一次花，快照从不补撒。SSE 连上时、
-    有目标或异常期间每 5 秒查一次快照。查不到（edge 没起来）按"没有"算。
+    异常，空 → 都清掉。`last` 是最近结束的目标：它是 `done` 且没见过
+    （按目标 id 和结束时间认）就撒一次花，所以丢掉的 `done` 事件会在下次
+    查快照时补上；应用启动后的第一次快照只记不撒。SSE 连上时、有目标或
+    异常期间每 5 秒查一次快照。查不到（edge 没起来）按"没有"算。
 
   - **对话**：实时语音会话的相位（`realtime:state` 事件和
     `GET /audio/realtime/status` 快照）。准备（`connecting`）→ 待机动画；

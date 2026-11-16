@@ -190,6 +190,60 @@ private slots:
         QCOMPARE(f.played.size(), 4);
     }
 
+    void lostDoneIsMadeUpForByTheSnapshot()
+    {
+        Fixture f;
+        auto snapshot = [&f](const QString &active, const QString &last) {
+            f.inputs.snapshotReceived(MascotInputs::goalPath(), 200,
+                                      QStringLiteral(R"({"active":%1,"last":%2})").arg(active, last));
+        };
+        const QString done1 = R"({"goalId":"g1","state":"done","time":100})";
+        const QString done2 = R"({"goalId":"g2","state":"done","time":200})";
+        // What ended before the app started is not celebrated.
+        snapshot("null", done1);
+        QCOMPARE(f.played.size(), 1);
+        snapshot(working("g2"), done1);
+        QCOMPARE(f.clip(), QString("type"));
+        // The done event for g2 never came.
+        snapshot("null", done2);
+        QCOMPARE(f.clip(), QString("done"));
+        QTRY_COMPARE(f.clip(), QString("rest"));
+        snapshot("null", done2);
+        QCOMPARE(f.played.size(), 4);
+        // A cancelled goal is remembered, not celebrated.
+        snapshot("null", R"({"goalId":"g3","state":"cancelled","time":300})");
+        QCOMPARE(f.played.size(), 4);
+    }
+
+    void doneEventAndSnapshotCelebrateOnce()
+    {
+        Fixture f;
+        const QString done1 = R"({"goalId":"g1","state":"done","time":100})";
+        f.inputs.snapshotReceived(MascotInputs::goalPath(), 200, R"({"active":null,"last":null})");
+        f.inputs.eventReceived("goal.state", QStringLiteral(
+            R"({"goalId":"g1","state":"done","active":null,"last":%1})").arg(done1));
+        QCOMPARE(f.clip(), QString("done"));
+        QTRY_COMPARE(f.clip(), QString("rest"));
+        f.inputs.snapshotReceived(MascotInputs::goalPath(), 200,
+                                  QStringLiteral(R"({"active":null,"last":%1})").arg(done1));
+        // Another goal's event still carries the old `last`.
+        f.inputs.eventReceived("goal.state", QStringLiteral(
+            R"({"goalId":"g2","state":"cancelled","active":null,"last":%1})").arg(done1));
+        QCOMPARE(f.played.size(), 3);
+    }
+
+    void eventBeforeTheFirstSnapshot()
+    {
+        Fixture f;
+        // Not a done event: its `last` is from before the app started.
+        f.inputs.eventReceived("goal.state",
+            R"({"goalId":"g2","state":"working","active":null,"last":{"goalId":"g1","state":"done","time":100}})");
+        QCOMPARE(f.played.size(), 1);
+        f.inputs.eventReceived("goal.state",
+            R"({"goalId":"g2","state":"done","active":null,"last":{"goalId":"g2","state":"done","time":200}})");
+        QCOMPARE(f.clip(), QString("done"));
+    }
+
     void doneWithTheNextGoalAlreadyRunning()
     {
         Fixture f;
