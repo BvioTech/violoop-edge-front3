@@ -62,6 +62,8 @@ qt_add_qml_module(violoop_edge_kiosk_qt
         qml/DebugWifiPage.qml
         qml/VersionPage.qml
         qml/AwayPage.qml
+        qml/AwayScene.qml
+        qml/PerfOverlay.qml
     RESOURCES
         # The designer's mascot model, loaded by qml/AwayPage.qml. Tracked
         # via git-lfs (see ../.gitattributes), not fetched by a script like
