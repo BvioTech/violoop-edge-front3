@@ -9,7 +9,7 @@ class QSocketNotifier;
 // decided in main.cpp:
 //
 //   SIGUSR1  save a screenshot          (src/Screenshot.h)
-//   SIGUSR2  start or stop the away page's performance recording
+//   SIGUSR2  start or stop the home page's performance recording
 //            (src/PerfRecorder.h)
 //
 // Create one, before anything that could be signalled matters. The launch

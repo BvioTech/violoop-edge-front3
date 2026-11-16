@@ -21,7 +21,7 @@ PAMName=login
 EnvironmentFile=-/etc/violoop/kiosk-qt
 RuntimeDirectory=violoop-edge-kiosk-qt
 RuntimeDirectoryMode=0750
-# /var/lib/violoop-edge-kiosk-qt: where the away page's performance
+# /var/lib/violoop-edge-kiosk-qt: where the home page's performance
 # recordings go (src/PerfRecorder.h). Unlike the runtime directory it
 # is kept across restarts and reboots.
 StateDirectory=violoop-edge-kiosk-qt

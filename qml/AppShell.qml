@@ -4,9 +4,9 @@ import QtQuick.Controls
 // Root window: physical-panel rotation (same convention as both spikes -
 // see ../demos/qt3d-spike/primitive_test.qml and
 // ../demos/ui-interface-spike/combined.qml, real-machine-confirmed in the
-// latter's validation item A), a persistent StatusHeader, and a `Loader`
-// driven by `nav.currentPage` (src/NavController.h/.cpp) for page
-// navigation.
+// latter's validation item A), a persistent StatusHeader, the home page,
+// and a `Loader` driven by `nav.currentPage` (src/NavController.h/.cpp)
+// for every other page.
 //
 // This is the third navigation mechanism tried - both QML-native ones
 // failed in ways invisible until real-device touch testing (see
@@ -88,15 +88,33 @@ ApplicationWindow {
                 }
             }
 
-            Loader {
-                id: pageLoader
+            Item {
                 width: parent.width
                 height: parent.height - 64
-                source: nav.currentPage
-                onSourceChanged: console.log("AppShell: loading", source)
-                onStatusChanged: {
-                    if (status === Loader.Error)
-                        console.error("AppShell: FAILED to load", source)
+
+                // The home page is the bottom of nav's stack (depth 1). It
+                // is created once and only hidden while another page is
+                // up, not loaded through the Loader like the rest: its 3D
+                // model takes about two seconds to load, which would
+                // otherwise be spent again at every return to it. See
+                // HomePage.qml for what it does while hidden.
+                HomePage {
+                    anchors.fill: parent
+                    visible: nav.depth === 1
+                }
+
+                Loader {
+                    id: pageLoader
+                    anchors.fill: parent
+                    source: nav.depth > 1 ? nav.currentPage : ""
+                    onSourceChanged: {
+                        if (source != "")
+                            console.log("AppShell: loading", source)
+                    }
+                    onStatusChanged: {
+                        if (status === Loader.Error)
+                            console.error("AppShell: FAILED to load", source)
+                    }
                 }
             }
         }

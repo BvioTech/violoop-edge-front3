@@ -13,6 +13,9 @@ import QtQuick
 // stopped from outside the app (SIGUSR2 or EDGE_KIOSK_RECORD_PERF, see
 // that header), not from here. The file's name is shown under the
 // readout.
+//
+// All of this only while the overlay is showing: hidden (its page is
+// under another one) it neither counts, reads nor records.
 Text {
     id: overlay
 
@@ -45,7 +48,11 @@ Text {
     Timer {
         interval: 1000
         repeat: true
-        running: true
+        running: overlay.visible
+        onRunningChanged: {
+            overlay.framesSwapped = 0
+            last = Date.now()
+        }
         property double last: Date.now()
         onTriggered: {
             const now = Date.now()
@@ -55,6 +62,6 @@ Text {
             perfRecorder.record(overlay.fps, overlay.clipName, overlay.paused)
         }
     }
-    Binding { target: systemStats; property: "active"; value: true }
+    Binding { target: systemStats; property: "active"; value: overlay.visible }
     Component.onDestruction: systemStats.active = false
 }

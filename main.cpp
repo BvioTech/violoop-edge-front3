@@ -1,11 +1,16 @@
+#include <QDebug>
+#include <QFile>
 #include <QFont>
 #include <QGuiApplication>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QtQml>
 
 #include "src/ClipPlayer.h"
 #include "src/JournalLog.h"
+#include "src/MascotDirector.h"
 #include "src/NavController.h"
 #include "src/PerfRecorder.h"
 #include "src/RestClient.h"
@@ -35,8 +40,12 @@ int main(int argc, char *argv[])
     font.setFamily(QStringLiteral("Sans Serif"));
     app.setFont(font);
 
-    // Instantiated by qml/AwayScene.qml, one per loaded model.
+    // Instantiated by qml/MascotScene.qml, one per loaded model.
     qmlRegisterType<ClipPlayer>("EdgeFrontQt.Core", 1, 0, "ClipPlayer");
+    // For MascotDirector's enums (Mascot.Working, Mascot.TouchLeft, ...);
+    // the one instance is `mascot`, below.
+    qmlRegisterUncreatableType<MascotDirector>("EdgeFrontQt.Core", 1, 0, "Mascot",
+                                               QStringLiteral("use the `mascot` context property"));
 
     QQmlApplicationEngine engine;
 
@@ -54,6 +63,16 @@ int main(int argc, char *argv[])
     auto *nav = new NavController(QStringLiteral("HomePage.qml"), &engine);
     auto *systemStats = new SystemStats(&engine);
     auto *perfRecorder = new PerfRecorder(systemStats, &engine);
+    // Decides which clip the home page's mascot plays, see
+    // MascotDirector.h. The manifest says what the built-in model's
+    // clips are for.
+    QFile manifestFile(QStringLiteral(":/EdgeFrontQt/assets/away/actions.json"));
+    QJsonObject manifest;
+    if (manifestFile.open(QIODevice::ReadOnly))
+        manifest = QJsonDocument::fromJson(manifestFile.readAll()).object();
+    if (manifest.isEmpty())
+        qWarning() << "main: cannot read the mascot's action manifest" << manifestFile.fileName();
+    auto *mascot = new MascotDirector(manifest, &engine);
     // SIGUSR1 saves a picture of the window, SIGUSR2 starts or stops the
     // away page's performance recording - see UnixSignalWatcher.h.
     auto *signalWatcher = new UnixSignalWatcher(&engine);
@@ -77,6 +96,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("upgradeStore", upgrade);
     engine.rootContext()->setContextProperty("systemStats", systemStats);
     engine.rootContext()->setContextProperty("perfRecorder", perfRecorder);
+    engine.rootContext()->setContextProperty("mascot", mascot);
 
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed,
@@ -84,8 +104,8 @@ int main(int argc, char *argv[])
         Qt::QueuedConnection);
     engine.load(QUrl(QStringLiteral("qrc:/EdgeFrontQt/qml/AppShell.qml")));
 
-    // For unattended runs (burn-in): open a page on top of the home page
-    // right at startup, e.g. EDGE_KIOSK_OPEN_PAGE=AwayPage.qml, so the run
+    // For unattended runs: open a page on top of the home page right at
+    // startup, e.g. EDGE_KIOSK_OPEN_PAGE=TestDisplayPage.qml, so the run
     // needs nobody to tap its way there - also not after the service has
     // restarted the app. Unset in normal use.
     const QByteArray openPage = qgetenv("EDGE_KIOSK_OPEN_PAGE");
