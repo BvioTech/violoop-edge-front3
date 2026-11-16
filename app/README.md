@@ -117,6 +117,24 @@ probe），只换启动脚本，各跑约 1 分钟：
 - 轻场景不受影响：`qt3d-spike` 的旋转立方体在 eglfs 下是 59–60 fps。GPU
   时间接近或超过一帧的场景才会吃这个亏。
 
+**抗锯齿在两种后端下都生效（2026-11-16）**
+
+怀疑过 eglfs 下 MSAA 没起作用，于是在 dev1 上对 weston/eglfs × MSAA High/
+关闭四种组合各截了 5 张图（`SIGUSR1`，默认视角）放大对比，并经人眼在屏幕上
+确认：
+
+- 开 MSAA 时模型外轮廓平滑，关掉后是阶梯，weston 和 eglfs 表现一致。
+- 模型内部的细线（青色发光边、面罩边缘的细高光）在四种组合下都有锯齿：
+  MSAA 只处理几何轮廓，不处理材质和高光内部的走样。看着"像没开抗锯齿"的
+  就是这部分。
+- eglfs 下关掉 MSAA，帧率从 45.1 fps / GPU 65% 升到 58.6 fps / GPU 46%
+  （`idle.default`，各约 1 分钟）。也就是 eglfs 的差距只在 GPU 时间接近一帧
+  时出现，和上面的推断一致。
+- 两种后端的界面字体不同：weston 下是 Noto Sans 风格，eglfs 下换成了另一种
+  字体，行距更紧、按钮更宽。原因没有查；3D 模型本身的渲染看不出区别。
+
+截图取的是应用自己渲染出的画面，不经过面板。
+
 逐帧耗时的取法：给服务加
 `Environment="QT_LOGGING_RULES=qt.scenegraph.time.renderloop=true"`，开发用的
 两个启动脚本都会沿用它，日志在 `$RUNTIME_DIRECTORY/app.log`。
