@@ -36,8 +36,8 @@ View3D {
     id: scene
 
     // Orbit camera: yaw, pitch and distance say where the camera is on a
-    // sphere around `pivot`. Whoever uses the scene moves them (the away
-    // page: by dragging and pinching).
+    // sphere around `pivot`. Whoever uses the scene may move them; the
+    // home page leaves them at the defaults.
     //
     // The defaults reproduce the camera the designer first set this
     // model up for (qt/VioPreview.qml in their 2026-11-13 package): 35
