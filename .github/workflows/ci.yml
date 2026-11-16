@@ -7,13 +7,10 @@ name: CI
 on:
   pull_request:
     branches: [main]
-    paths:
-      - "app/**"
-      - ".github/workflows/ci.yml"
-
-defaults:
-  run:
-    working-directory: app
+    # The app is the repository itself; demos/ holds the earlier spikes,
+    # which this workflow does not build.
+    paths-ignore:
+      - "demos/**"
 
 jobs:
   build-and-smoke-test:
@@ -25,7 +22,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           lfs: true
-          # Without this, app/assets/away/CesiumMan.glb (tracked via
+          # Without this, assets/away/VIO_DesktopPet.glb (tracked via
           # git-lfs, see ../../.gitattributes) checks out as a tiny LFS
           # pointer stub instead of real glTF bytes - CMake's RESOURCES
           # step would embed the stub as-is (no error), and the offscreen
@@ -76,7 +73,7 @@ jobs:
       - name: Offscreen smoke test
         # Loads AppShell.qml and every page it can reach without a
         # display/GPU - catches the class of bug this repo hit for real
-        # (app/docs/progress.md): a QML error that builds and loads fine
+        # (docs/progress.md): a QML error that builds and loads fine
         # but only crashes on the actual kiosk. Doesn't exercise touch
         # navigation or real backend data, just "does it come up clean".
         run: |

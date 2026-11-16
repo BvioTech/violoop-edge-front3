@@ -4,16 +4,12 @@ name: Build and release violoop-edge-kiosk-qt
 # tag push builds + releases, workflow_dispatch builds without releasing.
 # Runs on a native arm64 GitHub-hosted runner (not cross-compiled) because
 # violoop-qt6, the Qt runtime this links against, only ships an arm64
-# build - see app/packaging/debian/control.
+# build - see packaging/debian/control.
 on:
   push:
     tags:
       - "v*"
   workflow_dispatch: {}
-
-defaults:
-  run:
-    working-directory: app
 
 jobs:
   build:
@@ -23,7 +19,7 @@ jobs:
         with:
           lfs: true
           # See ci.yml's equivalent step: without this, the git-lfs-tracked
-          # assets under app/assets/ check out as pointer stubs, not real
+          # assets under assets/ check out as pointer stubs, not real
           # content, and the release .deb would ship a broken glTF asset.
 
       - name: Install build toolchain
@@ -66,7 +62,7 @@ jobs:
 
       - name: Offscreen smoke test
         # Cheap, high-value check learned the hard way during real-device
-        # bring-up this repo's app went through (see app/docs/progress.md -
+        # bring-up this repo's app went through (see docs/progress.md -
         # a QML error that builds/loads fine but crashes at runtime, like
         # the Window-has-no-font-property incident, would otherwise only
         # surface on the real kiosk). Doesn't need GPU/display access.
@@ -101,8 +97,8 @@ jobs:
         with:
           name: release-files-arm64
           path: |
-            app/output/*.deb
-            app/output/*.sha256
+            output/*.deb
+            output/*.sha256
           retention-days: 1
 
   release:
