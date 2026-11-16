@@ -23,12 +23,12 @@ if [ ! -d "$QT_PREFIX" ]; then
 fi
 
 PKG_NAME=$(awk -F': *' '/^Package:/{print $2; exit}' "$APP_DIR/packaging/debian/control")
-# The version comes from ./version (bumped by scripts/version.sh); the
+# The version comes from ./version.txt (bumped by scripts/version.sh); the
 # control file only holds VERSION_PLACEHOLDER, filled in below when the
 # staged copy is written.
-VERSION=$(tr -d '[:space:]' < "$APP_DIR/version")
+VERSION=$(tr -d '[:space:]' < "$APP_DIR/version.txt")
 if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "error: $APP_DIR/version holds '$VERSION', expected MAJOR.MINOR.PATCH" >&2
+  echo "error: $APP_DIR/version.txt holds '$VERSION', expected MAJOR.MINOR.PATCH" >&2
   exit 2
 fi
 

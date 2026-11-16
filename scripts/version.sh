@@ -1,5 +1,5 @@
 #!/bin/bash
-# Bumps ./version, commits it, tags the commit v<version> and pushes both.
+# Bumps ./version.txt, commits it, tags the commit v<version> and pushes both.
 # The tag push is what triggers .github/workflows/build-release.yml.
 #
 # Usage: scripts/version.sh [major|minor|patch]   (default: patch)
@@ -7,7 +7,9 @@
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
-VERSION_PATH=version
+# Not plain "version": the repo root is on the compiler's include path, so
+# a file of that name there is picked up as the C++ <version> header.
+VERSION_PATH=version.txt
 
 if [ $# -gt 1 ]; then
   echo "error: expected at most one argument (major|minor|patch)" >&2
