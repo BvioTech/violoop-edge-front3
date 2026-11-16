@@ -23,7 +23,13 @@ if [ ! -d "$QT_PREFIX" ]; then
 fi
 
 PKG_NAME=$(awk -F': *' '/^Package:/{print $2; exit}' "$APP_DIR/packaging/debian/control")
-VERSION=$(awk -F': *' '/^Version:/{print $2; exit}' "$APP_DIR/packaging/debian/control")
+# The version comes from ./version (bumped by scripts/version.sh), not
+# from the control file, whose Version: line is only a placeholder.
+VERSION=$(tr -d '[:space:]' < "$APP_DIR/version")
+if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "error: $APP_DIR/version holds '$VERSION', expected MAJOR.MINOR.PATCH" >&2
+  exit 2
+fi
 
 echo "Building $PKG_NAME $VERSION for $ARCH"
 
@@ -57,7 +63,8 @@ mkdir -p "$STAGE/DEBIAN" \
 # copy - just the one executable.
 install -m 0755 "$BIN" "$STAGE/opt/violoop-edge-kiosk-qt/violoop_edge_kiosk_qt"
 
-sed "s/Architecture: ARCH_PLACEHOLDER/Architecture: $ARCH/" \
+sed -e "s/Architecture: ARCH_PLACEHOLDER/Architecture: $ARCH/" \
+    -e "s/^Version: .*/Version: $VERSION/" \
     "$APP_DIR/packaging/debian/control" > "$STAGE/DEBIAN/control"
 install -m 0755 "$APP_DIR/packaging/debian/postinst" "$STAGE/DEBIAN/postinst"
 install -m 0755 "$APP_DIR/packaging/debian/prerm" "$STAGE/DEBIAN/prerm"
