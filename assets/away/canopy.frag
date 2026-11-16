@@ -16,11 +16,13 @@ void MAIN()
     vec3 reflection = 1.0 - exp(-light * (0.28 + 0.76 * fresnel));
     // The bottom of the optic picks up the cyan light guide under its lip.
     float spill = lower * smoothstep(0.44, 0.995, UV0.x);
-    vec3 reflectedLED=mix(vec3(.002,.13,.14),vec3(.32,.032,.003),signalWarmth);
+    vec3 reflectedLED=mix(vec3(.002,.13,.14),vec3(.32,.032,.003),clamp(signalWarmth,0.0,1.0));
+    if (signalWarmth<-.5) reflectedLED=vec3(.0025,.003,.0035);
     reflection += (1.0-reflection)*reflectedLED*spill*(.35+1.9*signalPower);
     float peak = max(reflection.r, max(reflection.g, reflection.b));
     vec3 glass = vec3(0.055, 0.175, 0.188) + fresnel * vec3(0.17, 0.37, 0.39);
     glass += rim*lower*reflectedLED*(.5+1.7*signalPower);
+    if (signalWarmth<-.5) glass=vec3(dot(glass,vec3(.2126,.7152,.0722)))*.45;
     float cover = 0.038 + 0.61 * fresnel + rim * (0.055 + 0.075 * lower);
     float alpha = peak + (1.0 - peak) * cover;
     BASE_COLOR = vec4(0.0, 0.0, 0.0, alpha);

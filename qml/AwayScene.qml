@@ -27,7 +27,7 @@ import EdgeFrontQt.Core
 // Asset: assets/away/VIO_DesktopPet.glb, the designer's mascot model
 // (tracked via git-lfs, see ../.gitattributes, and listed in
 // CMakeLists.txt's RESOURCES). Unlike the CesiumMan placeholder it
-// replaced (one walk cycle), it carries 19 clips named by event
+// replaced (one walk cycle), it carries 20 clips named by event
 // ("idle.default", "welcome", "touch.left", ...). RuntimeLoader only ever
 // shows the first one by itself; `clips` switches between them. Which
 // event plays which clip is not wired up - see
@@ -39,21 +39,27 @@ View3D {
     // sphere around `pivot`. Whoever uses the scene moves them (the away
     // page: by dragging and pinching).
     //
-    // The defaults reproduce the camera the designer set this model up
-    // for (qt/VioPreview.qml in their package): 35 degrees of vertical
-    // field of view, at (0, 1.10, 5.10), pitched -5.7 degrees. That line
-    // of sight crosses the character's axis (x = z = 0) at
-    // y = 1.10 - 5.10 * tan(5.7deg) ~= 0.59, which is the orbit pivot,
-    // 5.10 / cos(5.7deg) ~= 5.125 away. The model itself stands turned by
-    // modelYaw, as in that preview. minDistance..maxDistance is the
-    // preview's zoom range.
+    // The defaults reproduce the camera the designer first set this
+    // model up for (qt/VioPreview.qml in their 2026-11-13 package): 35
+    // degrees of vertical field of view, at (0, 1.10, 5.10), pitched -5.7
+    // degrees. That line of sight crosses the character's axis
+    // (x = z = 0) at y = 1.10 - 5.10 * tan(5.7deg) ~= 0.59, which is the
+    // orbit pivot, 5.10 / cos(5.7deg) ~= 5.125 away. The model itself
+    // stands turned by modelYaw, as in their preview (the 2026-11-15
+    // one). minDistance..maxDistance is the preview's zoom range.
+    //
+    // That 2026-11-15 preview also moved the camera in to 3.85. Not
+    // followed: on this panel it puts the laptop and the mug of the
+    // "working" clip off the bottom and right edges, and the character
+    // covering that much more of the screen costs a quarter of the frame
+    // rate (dev1: idle.default 42 fps against 56, working 41 against 56).
     readonly property real defaultYaw: 0
     readonly property real defaultPitch: -5.7
     readonly property vector3d pivot: Qt.vector3d(0, 0.59, 0)
     readonly property real defaultDistance: 5.125
     readonly property real minDistance: 2.75
     readonly property real maxDistance: 5.5
-    readonly property real modelYaw: -9
+    readonly property real modelYaw: 14
 
     property real yaw: defaultYaw
     property real pitch: defaultPitch
@@ -145,14 +151,21 @@ View3D {
     }
 
     // What the lights and the glass need from the loaded model (see the
-    // lights below): the two meshes the lights are scoped to, the visor
+    // lights below): the meshes the lights are scoped to, the visor
     // glass, and the node whose position the clips animate to say how
     // bright and how warm the model's own lamps currently are.
     //
     // bodyModel is the multi-material skinned shell ("VIO" in the file),
     // displayModel the inner face with the normal map ("Display"),
     // glassModel the transparent visor over it ("Window"),
+    // notebookModel and accessoryModel the two silver props of the
+    // "working" clip's desk (the laptop "Notebook"; the two monitors and
+    // the mug, one mesh), told apart from everything else by their silver
+    // material (metalness 0.52, roughness 0.32),
     // lightCue the empty node "VioLightCue", position (power, warmth, _).
+    // A warmth of -1 is not a colour but the cue's way of saying
+    // "offline" (the "offline" clip: grey lamp, grey eyes) - `offline`
+    // below, with its own branch wherever the warmth is used.
     // Looked up by glTF node name, falling back on what the nodes look
     // like - which is what actually finds them: RuntimeLoader (Qt
     // 6.8.5-violoop3) does not carry node names over. For the cue that is
@@ -162,14 +175,19 @@ View3D {
     property Model bodyModel: null
     property Model glassModel: null
     property Model displayModel: null
+    property Model notebookModel: null
+    property Model accessoryModel: null
     property Node lightCue: null
     readonly property real lightPower: lightCue ? lightCue.x : 0.5
     readonly property real warmth: lightCue ? lightCue.y : 0
-    readonly property color spill: Qt.rgba(0.04 + 0.96 * warmth, 0.84 - 0.58 * warmth, 0.94 - 0.91 * warmth, 1)
+    readonly property bool offline: warmth < -0.5
+    readonly property color spill: offline ? Qt.rgba(0.10, 0.11, 0.12, 1)
+                                           : Qt.rgba(0.04 + 0.96 * warmth, 0.84 - 0.58 * warmth, 0.94 - 0.91 * warmth, 1)
 
     function findRig() {
         let body = null, display = null, cue = null
         let bodyGuess = null, displayGuess = null, cueGuess = null, glass = null
+        let notebook = null, accessory = null
         function visit(node) {
             if (node.objectName === "VioLightCue")
                 cue = node
@@ -184,9 +202,25 @@ View3D {
                         bodyGuess = node
                     else if (n === 1 && !displayGuess && node.materials[0].normalMap)
                         displayGuess = node
+                    // roughness: the code windows are skinned, blended
+                    // single-material meshes too, but matte.
                     else if (n === 1 && !glass && node.materials[0] instanceof PrincipledMaterial
-                             && node.materials[0].alphaMode === PrincipledMaterial.Blend)
+                             && node.materials[0].alphaMode === PrincipledMaterial.Blend
+                             && node.materials[0].roughness < 0.5)
                         glass = node
+                } else {
+                    for (let i = 0; i < node.materials.length; ++i) {
+                        const m = node.materials[i]
+                        if (!(m instanceof PrincipledMaterial) || Math.abs(m.metalness - 0.52) > 0.001
+                                || Math.abs(m.roughness - 0.32) > 0.001)
+                            continue
+                        // The silver reflects the face's probe.
+                        m.lightProbe = faceProbe
+                        if (!notebook)
+                            notebook = node
+                        else if (notebook !== node)
+                            accessory = node
+                    }
                 }
             } else if (!cueGuess && node.children.length === 0 && Math.abs(node.z - 12.125) < 0.001) {
                 cueGuess = node
@@ -199,6 +233,8 @@ View3D {
         displayModel = display || displayGuess
         lightCue = cue || cueGuess
         glassModel = glass
+        notebookModel = notebook
+        accessoryModel = accessory
 
         // The designer's treatment of the face and the visor, as in their
         // qt/VioModel.qml. The face reflects its own small probe and its
@@ -209,6 +245,8 @@ View3D {
             const face = displayModel.materials[0]
             face.lightProbe = faceProbe
             face.emissiveFactor = Qt.binding(function() {
+                if (scene.offline)
+                    return Qt.vector3d(0.24, 0.24, 0.24)
                 return Qt.vector3d(1, 1 - 0.74 * scene.warmth, 1 - 0.84 * scene.warmth)
             })
         }
@@ -217,7 +255,7 @@ View3D {
         console.log("AwayScene: light rig - body", bodyModel, body ? "(by name)" : "(guessed)",
                     "display", displayModel, display ? "(by name)" : "(guessed)",
                     "cue", lightCue, cue ? "(by name)" : "(guessed)", "power", lightPower, "warmth", warmth,
-                    "glass", glassModel)
+                    "glass", glassModel, "notebook", notebookModel, "accessories", accessoryModel)
     }
 
     // The loaded model's animation clips: clips.clipNames,
@@ -249,7 +287,8 @@ View3D {
     // The visor glass: one transparent draw over the face that
     // computes its reflection of a studio panorama per pixel
     // (assets/away/canopy.frag, the designer's shader, unchanged), with
-    // the lamps' light picked up along its lower edge.
+    // the lamps' light picked up along its lower edge; it turns grey by
+    // itself when signalWarmth says offline.
     CustomMaterial {
         id: glassMaterial
         property real signalPower: scene.lightPower
@@ -293,21 +332,41 @@ View3D {
     }
 
     // The designer's light rig for this model, values as given in
-    // "VIO 灯光与设备接入参数" (2026-11-13): three directional and three
-    // point lights, each scoped to either the shell or the face
-    // (scene.bodyModel / scene.displayModel), positions in meters. Two
-    // of the point lights follow the model's own lamps in brightness
-    // and color (scene.lightPower / scene.spill).
+    // "VIO灯光参数与设备接入说明" (2026-11-15): three directional and
+    // three point lights, each scoped to either the shell or the face
+    // (scene.bodyModel / scene.displayModel), positions in meters, plus
+    // two directional lights for the desk of the "working" clip. Two of
+    // the point lights follow the model's own lamps in brightness and
+    // color (scene.lightPower / scene.spill).
     //
     // The rest of that rig is above: the environment's light probe,
     // the face's own probe and the glass shader. Everything outside
-    // the two scoped meshes (props, lamps) is lit by the environment
-    // probe alone, and the dark metal shell and the hands show little
-    // without it (on dev1: near black).
+    // the scoped meshes (the other props, lamps) is lit by the
+    // environment probe alone, and the dark metal shell and the hands
+    // show little without it (on dev1: near black).
     //
     // All of them stay fixed in the world (not parented to the camera
     // rig) on purpose: the shading changing as the camera orbits is
     // part of what shows this is a lit 3D scene.
+
+    // The laptop of the "working" clip. Off unless the model has one: a
+    // light without a scope would light everything.
+    DirectionalLight {
+        scope: scene.notebookModel
+        visible: scene.notebookModel !== null
+        eulerRotation: Qt.vector3d(-24, -18, 0)
+        color: "#e9edf5"
+        brightness: 2.80
+    }
+
+    // That clip's monitors and mug.
+    DirectionalLight {
+        scope: scene.accessoryModel
+        visible: scene.accessoryModel !== null
+        eulerRotation: Qt.vector3d(-27, -25, 0)
+        color: "#e9edf5"
+        brightness: 1.10
+    }
 
     // Face key.
     DirectionalLight {
@@ -374,6 +433,8 @@ View3D {
             scene.bodyModel = null
             scene.displayModel = null
             scene.glassModel = null
+            scene.notebookModel = null
+            scene.accessoryModel = null
             scene.lightCue = null
             scene.clips.detach()
             if (status === RuntimeLoader.Success) {
