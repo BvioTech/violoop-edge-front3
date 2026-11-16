@@ -12,6 +12,7 @@ qt_add_executable(violoop_edge_kiosk_qt
     src/ClipPlayer.cpp src/ClipPlayer.h
     src/JournalLog.cpp src/JournalLog.h
     src/MascotDirector.cpp src/MascotDirector.h
+    src/MascotInputs.cpp src/MascotInputs.h
     src/NavController.cpp src/NavController.h
     src/RestClient.cpp src/RestClient.h
     src/Screenshot.cpp src/Screenshot.h
@@ -100,3 +101,12 @@ qt_add_executable(test_mascot_director
 )
 target_link_libraries(test_mascot_director PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME mascot_director COMMAND test_mascot_director)
+
+qt_add_executable(test_mascot_inputs
+    tests/test_mascot_inputs.cpp
+    src/ActionCatalog.cpp src/ActionCatalog.h
+    src/MascotDirector.cpp src/MascotDirector.h
+    src/MascotInputs.cpp src/MascotInputs.h
+)
+target_link_libraries(test_mascot_inputs PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME mascot_inputs COMMAND test_mascot_inputs)

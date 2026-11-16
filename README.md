@@ -11,8 +11,9 @@
   `lib/pages/away/away_page.dart`（那边播的是预渲染 MP4）。单指滑动旋转
   视角、双指缩放、可暂停，用来证明是实时 3D 而不是视频。播哪段动画由
   `src/MascotDirector` 决定：没事时待机和随机小动作交替，点模型的左、中、
-  右会有反应，页面底部可手动指定一段（"自动"交还给它）。后端事件还没有
-  接进来，见 `docs/user-model-spec.md` 的"动画"一节。左上角是设备状态
+  右会有反应，页面底部可手动指定一段（"自动"交还给它）。后端状态经
+  `src/MascotInputs` 接进来，目前有离线和等待审批两种，见
+  `docs/user-model-spec.md` 的"动画"一节。左上角是设备状态
   图标（WiFi/云端/HDMI/USB/配对口），右上角"开发"按钮进开发菜单。
 - **工厂测试**：19 项测试 + `/stress` 占位。
 - **开发菜单**：工厂测试、调试、版本和升级的入口。
@@ -31,7 +32,8 @@
 ├── src/             # C++：RestClient/SseClient、StatusStore/TestVerdictStore/
 │                       UpgradeStore/NavController；主页用的 ClipPlayer
 │                       （播放动画片段）、MascotDirector/ActionCatalog
-│                       （决定播哪一段）、SystemStats/PerfRecorder（性能
+│                       （决定播哪一段）、MascotInputs（把后端状态
+│                       交给导演）、SystemStats/PerfRecorder（性能
 │                       读数和记录）；JournalLog（日志级别）、
 │                       UnixSignalWatcher/Screenshot（SIGUSR1 截图）、StateDir
 ├── tests/            # 单元测试（QtTest），`ctest --test-dir build`
