@@ -1,6 +1,5 @@
-qt3d-spike/build/
-qt3d-spike/assets/
-ui-interface-spike/build/
-app/build/
-app/build-*/
-app/output/
+build/
+build-*/
+output/
+demos/*/build/
+demos/qt3d-spike/assets/
