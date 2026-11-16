@@ -9,7 +9,7 @@
 #include "core/NavController.h"
 #include "core/PerfRecorder.h"
 #include "core/RestClient.h"
-#include "core/ScreenshotOnSignal.h"
+#include "core/Screenshot.h"
 #include "core/SseClient.h"
 #include "core/StatusStore.h"
 #include "core/SystemStats.h"
@@ -57,9 +57,10 @@ int main(int argc, char *argv[])
     // SIGUSR1 saves a picture of the window, SIGUSR2 starts or stops the
     // away page's performance recording - see UnixSignalWatcher.h.
     auto *signalWatcher = new UnixSignalWatcher(&engine);
-    new ScreenshotOnSignal(signalWatcher, &engine);
     QObject::connect(signalWatcher, &UnixSignalWatcher::received, perfRecorder, [perfRecorder](int signalNumber) {
-        if (signalNumber == SIGUSR2)
+        if (signalNumber == SIGUSR1)
+            saveScreenshot();
+        else if (signalNumber == SIGUSR2)
             perfRecorder->toggle();
     });
     // For unattended runs (burn-in): record from the start, so that a

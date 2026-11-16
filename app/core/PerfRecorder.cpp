@@ -1,11 +1,11 @@
 #include "PerfRecorder.h"
 
+#include "StateDir.h"
 #include "SystemStats.h"
 
 #include <QDateTime>
 #include <QDebug>
 #include <QDir>
-#include <QStandardPaths>
 
 namespace {
 
@@ -26,13 +26,9 @@ PerfRecorder::PerfRecorder(SystemStats *stats, QObject *parent)
 bool PerfRecorder::start()
 {
     stop();
-    // systemd may list several directories, colon-separated; ours has one.
-    QString dir = QString::fromLocal8Bit(qgetenv("STATE_DIRECTORY")).section(QLatin1Char(':'), 0, 0);
-    if (dir.isEmpty())
-        dir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
     const QString name = QStringLiteral("away-perf-%1.csv")
         .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss")));
-    m_file.setFileName(QDir(dir).filePath(name));
+    m_file.setFileName(QDir(stateDirectory()).filePath(name));
     if (!m_file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
         qWarning() << "PerfRecorder: could not open" << m_file.fileName() << "-" << m_file.errorString();
         return false;

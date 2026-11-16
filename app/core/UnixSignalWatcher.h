@@ -5,9 +5,10 @@
 class QSocketNotifier;
 
 // Turns SIGUSR1 and SIGUSR2 into a Qt signal delivered on the event loop,
-// so the app can be told to do something over SSH:
+// so the app can be told to do something over SSH. What each one does is
+// decided in main.cpp:
 //
-//   SIGUSR1  save a screenshot          (core/ScreenshotOnSignal.h)
+//   SIGUSR1  save a screenshot          (core/Screenshot.h)
 //   SIGUSR2  start or stop the away page's performance recording
 //            (core/PerfRecorder.h)
 //

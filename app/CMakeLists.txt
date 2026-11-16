@@ -12,10 +12,11 @@ qt_add_executable(violoop_edge_kiosk_qt
     core/JournalLog.cpp core/JournalLog.h
     core/NavController.cpp core/NavController.h
     core/RestClient.cpp core/RestClient.h
-    core/ScreenshotOnSignal.cpp core/ScreenshotOnSignal.h
+    core/Screenshot.cpp core/Screenshot.h
     core/SseClient.cpp core/SseClient.h
     core/StatusStore.cpp core/StatusStore.h
     core/TestVerdictStore.cpp core/TestVerdictStore.h
+    core/StateDir.cpp core/StateDir.h
     core/SystemStats.cpp core/SystemStats.h
     core/PerfRecorder.cpp core/PerfRecorder.h
     core/UnixSignalWatcher.cpp core/UnixSignalWatcher.h

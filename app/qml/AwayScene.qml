@@ -59,18 +59,10 @@ View3D {
     property real pitch: defaultPitch
     property real distance: defaultDistance
 
-    // The loaded model's bounds. Only logged these days (the camera used
-    // to be fitted to them), but measuring them is also how the scene
-    // knows the meshes have been through their first frame - see
-    // measureModel().
-    property vector3d modelMin: Qt.vector3d(0, 0, 0)
-    property vector3d modelMax: Qt.vector3d(0, 0, 0)
-
     // The model to show. A property so that a different file can be put
     // in without editing the loader (the user-supplied-model feature in
     // ../docs/user-model-spec.md will need that).
     property url modelSource: Qt.resolvedUrl("../assets/away/VIO_DesktopPet.glb")
-    property bool cullCollapsed: true
 
     // "loading" until the model is on screen, then "ready"; "error" if the
     // file could not be loaded.
@@ -87,63 +79,41 @@ View3D {
     property bool loadStarted: false
     onModelSourceChanged: loadState = "loading"
 
-    // Frames left in which to try measuring the freshly loaded model.
-    property int framesToMeasure: 0
+    // Frames left in which to wait for the freshly loaded model to have
+    // been drawn.
+    property int framesToWait: 0
     Connections {
         target: scene.Window.window
-        enabled: !scene.loadStarted || scene.framesToMeasure > 0
+        enabled: !scene.loadStarted || scene.framesToWait > 0
         function onFrameSwapped() {
             if (!scene.loadStarted) {
                 scene.loadStarted = true
                 return
             }
-            scene.framesToMeasure = scene.measureModel() ? 0 : scene.framesToMeasure - 1
-            // The model's meshes have been through a frame once they can
-            // be measured. Don't keep the indicator up forever for a model
-            // that has nothing to measure.
-            if (scene.framesToMeasure === 0 && scene.loadState === "loading")
+            scene.framesToWait = scene.modelDrawn() ? 0 : scene.framesToWait - 1
+            // Don't stay "loading" forever for a model that has no
+            // meshes to draw.
+            if (scene.framesToWait === 0 && scene.loadState === "loading")
                 scene.loadState = "ready"
         }
     }
 
-    // Sets modelMin/modelMax to the union of every mesh's own bounds,
-    // placed by its node's scene transform, and returns whether there was
-    // anything to measure yet: a mesh only gets its bounds once it has
-    // been through a frame, until then they read as empty (which is why
-    // this runs from frameSwapped above rather than on load).
-    //
-    // Not loader.bounds: for this model that is (-0.03, 0, 0)..(0.86, 1.1,
-    // 1.022) against a real extent of +-0.82 x 0..1.5 x +-0.80, before
-    // and after the first frame alike - just the span of where the prop
-    // nodes sit, without the character. Skinned meshes are measured in
-    // their bind pose (a skinned node's own transform doesn't apply),
-    // which is where the model stands when no clip moves it.
-    function measureModel() {
-        let lo = Qt.vector3d(Infinity, Infinity, Infinity)
-        let hi = Qt.vector3d(-Infinity, -Infinity, -Infinity)
+    // Whether the model has been through a frame, i.e. is on screen. A
+    // mesh only gets its bounds once it has been drawn, until then they
+    // read as empty - so the first mesh with bounds says so. (Not
+    // loader.bounds: for this model that reads the same before and after
+    // the first frame.)
+    function modelDrawn() {
         function visit(node) {
-            if (node instanceof Model) {
-                const a = node.bounds.minimum
-                const b = node.bounds.maximum
-                if (!a.fuzzyEquals(b)) {
-                    for (let i = 0; i < 8; ++i) {
-                        const corner = Qt.vector3d(i & 1 ? a.x : b.x, i & 2 ? a.y : b.y, i & 4 ? a.z : b.z)
-                        const p = node.skin ? corner : node.mapPositionToScene(corner)
-                        lo = Qt.vector3d(Math.min(lo.x, p.x), Math.min(lo.y, p.y), Math.min(lo.z, p.z))
-                        hi = Qt.vector3d(Math.max(hi.x, p.x), Math.max(hi.y, p.y), Math.max(hi.z, p.z))
-                    }
-                }
+            if (node instanceof Model && !node.bounds.minimum.fuzzyEquals(node.bounds.maximum))
+                return true
+            for (let i = 0; i < node.children.length; ++i) {
+                if (visit(node.children[i]))
+                    return true
             }
-            for (let i = 0; i < node.children.length; ++i)
-                visit(node.children[i])
-        }
-        visit(loader)
-        if (lo.x > hi.x)
             return false
-        modelMin = lo
-        modelMax = hi
-        console.log("AwayScene: model bounds", modelMin, modelMax)
-        return true
+        }
+        return visit(loader)
     }
 
     // Stops drawing nodes that the model has scaled down to nothing.
@@ -401,8 +371,6 @@ View3D {
         eulerRotation.y: scene.modelYaw
         source: scene.loadStarted ? scene.modelSource : ""
         onStatusChanged: {
-            scene.modelMin = Qt.vector3d(0, 0, 0)
-            scene.modelMax = Qt.vector3d(0, 0, 0)
             scene.bodyModel = null
             scene.displayModel = null
             scene.glassModel = null
@@ -411,9 +379,8 @@ View3D {
             if (status === RuntimeLoader.Success) {
                 scene.findRig()
                 scene.clips.attach(loader)
-                if (scene.cullCollapsed)
-                    scene.hideCollapsedNodes()
-                scene.framesToMeasure = 600
+                scene.hideCollapsedNodes()
+                scene.framesToWait = 600
             } else if (status === RuntimeLoader.Error) {
                 scene.loadState = "error"
                 console.error("AwayScene: RuntimeLoader failed to load", source, "-", errorString)

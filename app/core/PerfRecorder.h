@@ -20,15 +20,14 @@ class SystemStats;
 // UnixSignalWatcher). EDGE_KIOSK_RECORD_PERF=1 in the service's
 // environment starts it with the app, for runs nobody is watching.
 //
-// qml/AwayPage.qml feeds it: record() on the same one-second tick that
-// updates the on-screen numbers (the page supplies what only it knows -
-// frame rate and the clip playing - the rest comes from SystemStats).
-// Nothing is written while that page is not open.
+// qml/PerfOverlay.qml feeds it: record() on the same one-second tick
+// that updates the on-screen numbers (the overlay supplies what only the
+// page knows - frame rate and the clip playing - the rest comes from
+// SystemStats). Nothing is written while the away page is not open.
 //
 // Every start() begins a new file, away-perf-<date>-<time>.csv, in the
-// service's state directory (systemd's $STATE_DIRECTORY, i.e.
-// /var/lib/violoop-edge-kiosk-qt - it survives reboots) or, when not run
-// by that unit, the temp directory. Each line is flushed as it is
+// service's state directory (/var/lib/violoop-edge-kiosk-qt, or the temp
+// directory when run by hand - core/StateDir.h). Each line is flushed as it is
 // written, so a run cut short by a crash or power loss keeps everything
 // up to its last second. Columns:
 //

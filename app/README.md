@@ -25,10 +25,15 @@ app/
 ├── CMakeLists.txt
 ├── main.cpp
 ├── core/            # C++：RestClient/SseClient、StatusStore/TestVerdictStore/
-│                       UpgradeStore/NavController
+│                       UpgradeStore/NavController；待机页用的 ClipPlayer
+│                       （动画片段）、SystemStats/PerfRecorder（性能读数和
+│                       记录）；JournalLog（日志级别）、UnixSignalWatcher/
+│                       Screenshot（SIGUSR1 截图）、StateDir
 ├── qml/              # 所有页面，flat 结构（不用子目录，避免 QML 跨目录
 │                       import/qmldir 问题），TestPageFrame.qml 是 19+
-│                       工厂测试子页面共用的外壳
+│                       工厂测试子页面共用的外壳；待机页是 AwayPage.qml
+│                       （手势和按钮）+ AwayScene.qml（模型、灯光、相机）
+│                       + PerfOverlay.qml（性能读数）
 ├── assets/
 │   └── away/          # AwayPage.qml 用的 glTF 模型，git-lfs 追踪（见
 │                        ../.gitattributes）。VIO_DesktopPet.glb 是设计师
@@ -65,13 +70,13 @@ QT_QPA_PLATFORM=offscreen timeout 5 ./build/violoop_edge_kiosk_qt
 
 ## 截图
 
-给应用进程发 `SIGUSR1`，它会把自己的窗口存成 PNG（`core/ScreenshotOnSignal`），
+给应用进程发 `SIGUSR1`，它会把自己的窗口存成 PNG（`core/Screenshot`），
 已经转正，不用再旋转：
 
 ```bash
 sudo kill -USR1 "$(systemctl show -p MainPID --value violoop-edge-kiosk-qt)"
 # -> /var/lib/violoop-edge-kiosk-qt/screenshot-<日期>-<时间>.png
-#    路径同时记在日志里：journalctl -u violoop-edge-kiosk-qt | grep ScreenshotOnSignal
+#    路径同时记在日志里：journalctl -u violoop-edge-kiosk-qt | grep Screenshot:
 ```
 
 截图由应用自己完成，不依赖 `weston-screenshooter`，所以在 eglfs 下也能用。
