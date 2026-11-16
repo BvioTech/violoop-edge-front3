@@ -8,6 +8,14 @@
 # not meant to run standalone over plain SSH.
 set -uo pipefail
 
+# SIGUSR1 and SIGUSR2 ask the app for a screenshot and to start or stop
+# its performance recording (app/core/UnixSignalWatcher.h). They are sent
+# to the service's main process - which is this script until the exec at
+# the bottom, and their default action is to kill. Ignore them here; the
+# setting is inherited by weston and by the app, which then installs its
+# own handlers.
+trap '' USR1 USR2
+
 QT_PREFIX=/opt/violoop-qt6
 BIN=/opt/violoop-edge-kiosk-qt/violoop_edge_kiosk_qt
 
@@ -48,9 +56,14 @@ if [ "$QPA" = eglfs ]; then
     # picked card1 here and aborted with "no screens available" (see
     # qt3d-spike/docs/findings.md, "EGLFS QPA"), so name the device.
     KMS_CONFIG="$RUN_DIR/eglfs_kms.json"
-    printf '{ "device": "/dev/dri/card0" }\n' >"$KMS_CONFIG"
-    export QT_QPA_EGLFS_KMS_CONFIG="$KMS_CONFIG"
-    exec "$BIN"
+    if printf '{ "device": "/dev/dri/card0" }\n' >"$KMS_CONFIG"; then
+        export QT_QPA_EGLFS_KMS_CONFIG="$KMS_CONFIG"
+        exec "$BIN"
+    fi
+    # Without that file Qt picks card1 and the service would restart in a
+    # loop with nothing pointing here. <4> is journald's warning level.
+    echo "<4>violoop-edge-kiosk-qt-launch: could not write $KMS_CONFIG, using wayland" >&2
+    unset QT_QPA_EGLFS_INTEGRATION QT_QPA_EGLFS_HIDECURSOR
 fi
 
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"

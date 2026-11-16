@@ -2,7 +2,7 @@
 
 #include <QObject>
 
-class QSocketNotifier;
+class UnixSignalWatcher;
 
 // Saves a picture of the app's window when the process gets SIGUSR1, so a
 // screen can be captured over SSH:
@@ -20,10 +20,8 @@ class ScreenshotOnSignal : public QObject
 {
     Q_OBJECT
 public:
-    explicit ScreenshotOnSignal(QObject *parent = nullptr);
+    explicit ScreenshotOnSignal(UnixSignalWatcher *watcher, QObject *parent = nullptr);
 
 private:
     void take();
-
-    QSocketNotifier *m_notifier = nullptr;
 };

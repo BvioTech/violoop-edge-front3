@@ -74,9 +74,12 @@ sudo kill -USR1 "$(systemctl show -p MainPID --value violoop-edge-kiosk-qt)"
 #    路径同时记在日志里：journalctl -u violoop-edge-kiosk-qt | grep ScreenshotOnSignal
 ```
 
-不要用 `systemctl kill -s USR1`：它会把信号发给服务里的所有进程，包括
-weston，而 weston 没有处理这个信号的理由，很可能直接退出（没有实测）。截图由应用自己完成，不依赖 `weston-screenshooter`，所以在
-eglfs 下也能用。
+截图由应用自己完成，不依赖 `weston-screenshooter`，所以在 eglfs 下也能用。
+文件不会自动清理，用完请自己删。
+
+`SIGUSR2` 是另一个命令：开始或停止待机页的性能记录，见"性能标杆"的"复现"。
+启动脚本在应用起来之前忽略这两个信号，所以服务刚重启时发过去只会被丢掉，
+不会把服务杀掉。
 
 ## 不经 weston（eglfs）
 
@@ -130,8 +133,11 @@ probe），只换启动脚本，各跑约 1 分钟：
 - eglfs 下关掉 MSAA，帧率从 45.1 fps / GPU 65% 升到 58.6 fps / GPU 46%
   （`idle.default`，各约 1 分钟）。也就是 eglfs 的差距只在 GPU 时间接近一帧
   时出现，和上面的推断一致。
-- 两种后端的界面字体不同：weston 下是 Noto Sans 风格，eglfs 下换成了另一种
-  字体，行距更紧、按钮更宽。原因没有查；3D 模型本身的渲染看不出区别。
+- 当时两种后端的界面字体不同：Qt 的默认字体族由平台插件决定，wayland 是
+  "Sans Serif"（设备上解析成 Noto Sans），eglfs 是 DejaVu，后者更宽，按钮和
+  行距都跟着变。现在 `main.cpp` 统一指定 "Sans Serif"，两边的排版一致
+  （dev1 截图对比确认；字形的细微渲染差异还在）。3D 模型本身的渲染看不出
+  区别。
 
 截图取的是应用自己渲染出的画面，不经过面板。
 
@@ -235,20 +241,29 @@ GPU 负载（35%–74%），不改变帧率；去掉上限之后它们对帧率�
 
 **复现**
 
-待机页打开期间自动记录到
-`/var/lib/violoop-edge-kiosk-qt/away-perf-<日期>-<时间>.csv`（列的含义见
-`core/PerfRecorder.h`），页面右上角同时显示实时读数。无人值守烤机时让
-kiosk 启动后直接进待机页：
+待机页右上角一直显示实时读数。写文件默认是关的，要显式打开：
+
+```bash
+# 开始记录；再发一次停止
+sudo kill -USR2 "$(systemctl show -p MainPID --value violoop-edge-kiosk-qt)"
+# -> /var/lib/violoop-edge-kiosk-qt/away-perf-<日期>-<时间>.csv
+```
+
+列的含义见 `core/PerfRecorder.h`。只有待机页开着的时候才有数据写入；
+每次开始记录都新建一个文件，用完请自己删，没有自动清理。
+
+无人值守烤机时让 kiosk 启动后直接进待机页并开始记录：
 
 ```bash
 sudo mkdir -p /etc/systemd/system/violoop-edge-kiosk-qt.service.d
-printf '[Service]\nEnvironment=EDGE_KIOSK_OPEN_PAGE=AwayPage.qml\n' \
+printf '[Service]\nEnvironment=EDGE_KIOSK_OPEN_PAGE=AwayPage.qml\nEnvironment=EDGE_KIOSK_RECORD_PERF=1\n' \
   | sudo tee /etc/systemd/system/violoop-edge-kiosk-qt.service.d/burn-in.conf
 sudo systemctl daemon-reload && sudo systemctl restart violoop-edge-kiosk-qt
 # 结束后删掉 burn-in.conf，再 daemon-reload 并重启服务
 ```
 
-服务中途重启会另起一个新 CSV，所以文件数大于 1 就说明烤机期间重启过。
+用环境变量而不是信号，是因为服务中途重启后信号打开的记录不会恢复。
+重启会另起一个新 CSV，所以文件数大于 1 就说明烤机期间重启过。
 
 ## 打包
 

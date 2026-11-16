@@ -553,11 +553,10 @@ Item {
         }
     }
     Binding { target: systemStats; property: "active"; value: true }
-    Component.onCompleted: perfRecorder.start()
-    Component.onDestruction: {
-        perfRecorder.stop()
-        systemStats.active = false
-    }
+    // Recording to a file is off unless asked for: SIGUSR2 or
+    // EDGE_KIOSK_RECORD_PERF, see core/PerfRecorder.h. It is not tied to
+    // this page being open; record() above simply does nothing meanwhile.
+    Component.onDestruction: systemStats.active = false
 
     Text {
         anchors.top: hint.bottom

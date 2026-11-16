@@ -53,6 +53,16 @@ void PerfRecorder::stop()
     emit fileChanged();
 }
 
+void PerfRecorder::toggle()
+{
+    if (m_file.isOpen()) {
+        qInfo() << "PerfRecorder: stopped recording to" << m_file.fileName();
+        stop();
+    } else {
+        start();
+    }
+}
+
 void PerfRecorder::record(qreal fps, const QString &clip, bool paused)
 {
     if (!m_file.isOpen())

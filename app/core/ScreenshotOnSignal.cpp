@@ -1,54 +1,25 @@
 #include "ScreenshotOnSignal.h"
 
+#include "UnixSignalWatcher.h"
+
 #include <QDateTime>
 #include <QDebug>
 #include <QDir>
 #include <QGuiApplication>
 #include <QImage>
 #include <QQuickWindow>
-#include <QSocketNotifier>
 #include <QStandardPaths>
 #include <QTransform>
 
-#include <fcntl.h>
 #include <signal.h>
-#include <unistd.h>
 
-namespace {
-
-// A signal handler may only do async-signal-safe work, so it writes one
-// byte to this pipe and the event loop picks it up from the other end.
-int g_pipe[2] = {-1, -1};
-
-void onSignal(int)
-{
-    const char byte = 1;
-    const ssize_t written = ::write(g_pipe[1], &byte, 1);
-    Q_UNUSED(written);
-}
-
-} // namespace
-
-ScreenshotOnSignal::ScreenshotOnSignal(QObject *parent)
+ScreenshotOnSignal::ScreenshotOnSignal(UnixSignalWatcher *watcher, QObject *parent)
     : QObject(parent)
 {
-    if (::pipe2(g_pipe, O_CLOEXEC | O_NONBLOCK) != 0) {
-        qWarning() << "ScreenshotOnSignal: pipe2 failed, screenshots on SIGUSR1 are off";
-        return;
-    }
-    m_notifier = new QSocketNotifier(g_pipe[0], QSocketNotifier::Read, this);
-    connect(m_notifier, &QSocketNotifier::activated, this, [this]() {
-        char buffer[16];
-        while (::read(g_pipe[0], buffer, sizeof buffer) > 0) { }
-        take();
+    connect(watcher, &UnixSignalWatcher::received, this, [this](int signalNumber) {
+        if (signalNumber == SIGUSR1)
+            take();
     });
-
-    struct sigaction action = {};
-    action.sa_handler = onSignal;
-    action.sa_flags = SA_RESTART;
-    sigemptyset(&action.sa_mask);
-    if (::sigaction(SIGUSR1, &action, nullptr) != 0)
-        qWarning() << "ScreenshotOnSignal: sigaction failed, screenshots on SIGUSR1 are off";
 }
 
 void ScreenshotOnSignal::take()

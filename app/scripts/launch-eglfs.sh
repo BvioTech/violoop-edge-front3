@@ -10,6 +10,10 @@
 # TTYPath=/dev/tty7, not plain SSH.
 set -uo pipefail
 
+# See the packaged launcher: SIGUSR1 and SIGUSR2 are commands to the
+# app and must not kill this script before the exec.
+trap '' USR1 USR2
+
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN="${EDGE_QT_BIN:-$APP_DIR/build/violoop_edge_kiosk_qt}"
 
@@ -28,7 +32,10 @@ RUN_DIR="${RUNTIME_DIRECTORY:-/tmp/violoop-edge-kiosk}"
 mkdir -p "$RUN_DIR"
 
 KMS_CONFIG="$RUN_DIR/eglfs_kms.json"
-printf '{ "device": "/dev/dri/card0" }\n' >"$KMS_CONFIG"
+if ! printf '{ "device": "/dev/dri/card0" }\n' >"$KMS_CONFIG"; then
+    echo "launch-eglfs.sh: could not write $KMS_CONFIG" >&2
+    exit 1
+fi
 export QT_QPA_EGLFS_KMS_CONFIG="$KMS_CONFIG"
 
 exec "$BIN" >"$RUN_DIR/app.log" 2>&1

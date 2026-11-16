@@ -11,6 +11,10 @@
 # afterwards.
 set -uo pipefail
 
+# See the packaged launcher: SIGUSR1 and SIGUSR2 are commands to the
+# app and must not kill this script, or weston, before the exec.
+trap '' USR1 USR2
+
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN="${EDGE_QT_BIN:-$APP_DIR/build/violoop_edge_kiosk_qt}"
 
