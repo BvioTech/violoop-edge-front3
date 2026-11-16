@@ -70,9 +70,14 @@ qt_add_qml_module(violoop_edge_kiosk_qt
         # glTF-Sample-Models' CesiumMan, CC0). Kept as the lightweight
         # baseline every real-hardware number so far was measured with.
         assets/away/CesiumMan.glb
-        # Light probe for qml/AwayPage.qml, written by
-        # scripts/make-away-probe.py.
-        assets/away/studio-probe.hdr
+        # The designer's scene resources for qml/AwayPage.qml, as shipped
+        # in their package's qt/ folder: the environment light probe, the
+        # face's own probe, the panorama the visor glass reflects, and the
+        # glass shader.
+        assets/away/visor-studio.hdr
+        assets/away/display-studio.hdr
+        assets/away/optical-studio.hdr
+        assets/away/canopy.frag
 )
 
 target_link_libraries(violoop_edge_kiosk_qt PRIVATE

@@ -16,7 +16,7 @@
 | 文件格式 | glTF 2.0 的 `.glb`，贴图和缓冲区全部内嵌，单文件 | 已验证。`RuntimeLoader` 只支持 glTF 2.0 和 OBJ，而 OBJ 不带骨骼。FBX、VRM、BVH 等需用户先用 Blender 等工具转成 glb |
 | 文件完整性 | glb 头里的长度字段必须等于实际文件大小 | 已验证。截断的文件会报误导性的 `No suitable reader found for the file format`（见 findings.md 第五轮） |
 | 坐标与单位 | Y 轴朝上，单位为米，角色面朝 +Z | glTF 标准；页面相机在 +Z 方向看向原点 |
-| 摆放与尺寸 | 脚底在 y=0，站在原点，身高约 1.5 m（现有相机的近似适用范围约 1.2–1.8 m） | 相机参数写死：环绕点 (0, 0.58, 0)，距离 3.55，按 CesiumMan 调的。做了"相机自适应"（见下）后可降为建议 |
+| 摆放与尺寸 | 脚底在 y=0，站在原点，身高约 1.5 m（现有相机的近似适用范围约 1.2–1.8 m） | 相机参数写死：环绕点 (0, 0.59, 0)，距离 5.125，FOV 35°，按设计师给 VIO 模型的预览调的。做了"相机自适应"（见下）后可降为建议 |
 | 蒙皮 | 标准 glTF skin，每个顶点最多 4 个骨骼权重 | 推断：Quick3D 只用第一组 `JOINTS_0/WEIGHTS_0`，多出的权重会被忽略 |
 
 ## 动画（TODO，待设计）
@@ -110,9 +110,11 @@ mesh，80 个材质（导入后合并为 61 个），15 张 PNG 贴图（最大 
   改为遍历各 `Model.bounds` 求并集，而且要等渲染过一帧之后才有值。
 - **偏暗**（已处理，已在 dev1 截图确认）：材质是深色金属（baseColor 约
   0.02–0.03、metallic 0.6 左右），没有环境光照时机身和圆手几乎全黑，只有
-  高光和自发光部分可见。页面现在带一张自制的 light probe
-  （`assets/away/studio-probe.hdr`，由 `scripts/make-away-probe.py` 生成），
-  是设计师三张 HDR 到位之前的替代品。性能代价未测。
+  高光和自发光部分可见。页面现在用设计师随模型给的三张 HDR
+  （`assets/away/` 下的 `visor-studio.hdr` 作环境 light probe、
+  `display-studio.hdr` 给脸部、`optical-studio.hdr` 给面罩玻璃的着色器
+  `canopy.frag`），替换了之前自制的替代品。dev1 真屏 `idle.default`
+  约 30 秒：53.6 fps、GPU 84%，和替换前（55.0 fps、79%）相近。
 
 - **动画之间的过渡**（已做）：任何时刻切换都立即进行，带 225 ms 交叉淡化
   （`TimelineLoopCloser::playClip` 的 `fadeMs`；QtQuickTimeline 本身不能
@@ -129,7 +131,10 @@ mesh，80 个材质（导入后合并为 61 个），15 张 PNG 贴图（最大 
 
 - [ ] **加载路径**：现在模型编在 Qt 资源里（`../CMakeLists.txt` 的
       RESOURCES），要改成能从文件系统路径加载用户文件。
-- [x] **相机自适应**：已做（不是用 `loader.bounds`，见上面的实测记录）。
+- [ ] **相机自适应**：做过（不是用 `loader.bounds`，见上面的实测记录），
+  但 2026-11-14 为了和设计师的预览一致，相机改回了写死的参数（FOV 35°，
+  环绕点 (0, 0.59, 0)，距离 5.125，俯角 -5.7°，模型偏航 -9°）。支持用户
+  自带模型时需要把自适应加回来。
       "身高约 1.5 m、脚底在原点"可以降为建议。
 - [ ] **校验与回退**：用户文件是不可信输入。加载前检查文件大小和 glb 头，
       `RuntimeLoader.Error` 时回退到默认模型。
