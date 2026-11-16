@@ -8,11 +8,11 @@
 
 - **主页**：实时渲染的 3D 吉祥物（`qml/HomePage.qml`，Qt Quick3D
   `RuntimeLoader` 运行时加载 glTF），对应 edge-front2 的待机页
-  `lib/pages/away/away_page.dart`（那边播的是预渲染 MP4）。单指滑动旋转
-  视角、双指缩放、可暂停，用来证明是实时 3D 而不是视频。播哪段动画由
+  `lib/pages/away/away_page.dart`（那边播的是预渲染 MP4）。视角固定，
+  唯一的手势是点击。播哪段动画由
   `src/MascotDirector` 决定：没事时待机和随机小动作交替，点模型的左、中、
-  右会有反应，页面底部可手动指定一段（"自动"交还给它）。后端状态经
-  `src/MascotInputs` 接进来，目前有离线和等待审批两种，见
+  右会有反应。后端状态经
+  `src/MascotInputs` 接进来，有离线、等待审批、工作、完成、异常和实时对话，见
   `docs/user-model-spec.md` 的"动画"一节。左上角是设备状态
   图标（WiFi/云端/HDMI/USB/配对口），右上角"开发"按钮进开发菜单。
 - **工厂测试**：19 项测试 + `/stress` 占位。
@@ -40,7 +40,7 @@
 ├── qml/              # 所有页面，flat 结构（不用子目录，避免 QML 跨目录
 │                       import/qmldir 问题），TestPageFrame.qml 是 19+
 │                       工厂测试子页面共用的外壳；主页是 HomePage.qml
-│                       （手势和按钮）+ MascotScene.qml（模型、灯光、相机）
+│                       （点击和入口按钮）+ MascotScene.qml（模型、灯光、相机）
 │                       + PerfOverlay.qml（性能读数）
 ├── assets/
 │   └── away/          # 主页用的 glTF 模型，git-lfs 追踪（见

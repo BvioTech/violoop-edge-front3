@@ -2,6 +2,11 @@
 
 > 写给处理 `device` 仓库（violoop-edge）的人或 agent。2026-11-16。
 > 提需求的一方是 `edge-front3`（设备屏幕上的 kiosk 应用）。
+>
+> **已完成**：device 仓库加了 `goal.state` 事件和 `GET /status/goal`
+> （`device/docs/protocols/local-http-events.md` §3.2a），kiosk 这边已在
+> `src/MascotInputs` 接上。本文留作需求记录，最终接口以 device 的协议
+> 文档为准。
 
 ## 背景
 

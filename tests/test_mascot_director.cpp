@@ -177,6 +177,105 @@ private slots:
         QCOMPARE(f.played(), QStringList({ "rest", "welcome!", "type" }));
     }
 
+    void conversationPhases()
+    {
+        Fixture f;
+        QSignalSpy lamp(&f.director, &MascotDirector::steadyLampChanged);
+        f.attach();
+        f.director.set(MascotDirector::Error);
+        f.director.set(MascotDirector::Conversation, "preparing");
+        f.director.set(MascotDirector::Conversation, "listening");
+        QVERIFY(f.director.steadyLamp());
+        f.director.set(MascotDirector::Conversation, "thinking");
+        QVERIFY(!f.director.steadyLamp());
+        f.director.set(MascotDirector::Conversation, "speaking");
+        QCOMPARE(f.played(), QStringList({ "rest", "error", "rest", "wait", "type", "welcome!" }));
+        // The nod once, then resting for as long as the speaking lasts.
+        QTest::qWait(clipMs * 3);
+        QCOMPARE(f.played().mid(6), QStringList({ "rest" }));
+        // The next turn nods again.
+        f.director.set(MascotDirector::Conversation, "listening");
+        f.director.set(MascotDirector::Conversation, "speaking");
+        QCOMPARE(f.played().mid(7), QStringList({ "wait", "welcome!" }));
+        // Cut short by the end of the conversation.
+        f.director.clear(MascotDirector::Conversation);
+        QCOMPARE(f.played().last(), QString("error"));
+        QTest::qWait(clipMs * 2);
+        QCOMPARE(f.played().last(), QString("error"));
+        QCOMPARE(lamp.size(), 4);
+    }
+
+    void thinkingUsesTheGoalsWorkClip()
+    {
+        Fixture f;
+        f.attach();
+        f.director.set(MascotDirector::Working, "goal-1");
+        f.director.set(MascotDirector::Working, "goal-2");
+        f.director.set(MascotDirector::Conversation, "listening");
+        f.director.set(MascotDirector::Conversation, "thinking");
+        f.director.clear(MascotDirector::Conversation);   // the same clip: carries on
+        QCOMPARE(f.played(), QStringList({ "rest", "type", "read", "wait", "read" }));
+    }
+
+    void thinkingWithoutAGoalUsesTheNextGoalsClip()
+    {
+        Fixture f;
+        f.attach();
+        f.director.set(MascotDirector::Working, "goal-1");
+        f.director.clear(MascotDirector::Working);
+        f.director.set(MascotDirector::Conversation, "thinking");
+        // The thinking turns into a goal: nothing changes.
+        f.director.set(MascotDirector::Working, "goal-2");
+        f.director.clear(MascotDirector::Conversation);
+        QCOMPARE(f.played(), QStringList({ "rest", "type", "rest", "read" }));
+    }
+
+    void doneWhileAnotherGoalRuns()
+    {
+        Fixture f;
+        f.attach();
+        f.director.set(MascotDirector::Working, "goal-1");
+        f.director.set(MascotDirector::Working, "goal-2");
+        QVERIFY(f.director.cue(MascotDirector::Done));
+        // goal-2 keeps its clip.
+        QTRY_COMPARE(f.played(), QStringList({ "rest", "type", "read", "done!", "read" }));
+    }
+
+    void droppedCuesSaySo()
+    {
+        Fixture f;
+        QVERIFY(!f.director.cue(MascotDirector::Done));   // nobody watching
+        f.attach();
+        QVERIFY(f.director.cue(MascotDirector::TouchLeft));
+        QVERIFY(!f.director.cue(MascotDirector::Done));   // the touch plays in full
+        f.director.set(MascotDirector::Offline);
+        QTRY_COMPARE(f.played().last(), QString("offline"));
+        QVERIFY(!f.director.cue(MascotDirector::Done));
+    }
+
+    void noTouchesInAConversation()
+    {
+        Fixture f;
+        f.attach();
+        f.director.set(MascotDirector::Conversation, "preparing");
+        f.director.cue(MascotDirector::TouchLeft);
+        f.director.set(MascotDirector::Working, "goal-1");
+        f.director.cue(MascotDirector::Done);
+        QCOMPARE(f.played(), QStringList({ "rest" }));
+    }
+
+    void steadyLampGoesWithTheStage()
+    {
+        Fixture f;
+        f.attach();
+        f.director.set(MascotDirector::Conversation, "listening");
+        QVERIFY(f.director.steadyLamp());
+        f.director.stageDetached();
+        QVERIFY(!f.director.steadyLamp());
+        f.attach();
+        QVERIFY(f.director.steadyLamp());
+    }
+
     void manualLoopsWhateverWasPicked()
     {
         Fixture f;
@@ -211,31 +310,6 @@ private slots:
         f.director.stageDetached();
         QTest::qWait(clipMs * 3);
         QCOMPARE(f.played(), QStringList({ "rest" }));
-    }
-
-    void pausedStageStopsTheClock()
-    {
-        Fixture f;
-        f.attach();
-        f.director.stagePaused(true);
-        QTest::qWait(clipMs * 3);
-        QCOMPARE(f.played(), QStringList({ "rest" }));
-        f.director.stagePaused(false);
-        QTRY_COMPARE(f.played().mid(0, 2), QStringList({ "rest", "play" }));
-    }
-
-    void manualRestThenIdleRestartsThePausedClip()
-    {
-        // The resting clip, picked by hand (it just carries on) and
-        // paused. Handing the choice back asks for the same clip again,
-        // but this time it must be sent out: that is what takes the stage
-        // out of pause and starts the round.
-        Fixture f;
-        f.attach();
-        f.director.set(MascotDirector::Manual, "rest");
-        f.director.stagePaused(true);
-        f.director.clear(MascotDirector::Manual);
-        QCOMPARE(f.played(), QStringList({ "rest", "rest" }));
     }
 
     void posesAreNotTimedByTheirLength()

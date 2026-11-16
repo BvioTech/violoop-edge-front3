@@ -42,13 +42,29 @@
 class MascotDirector : public QObject
 {
     Q_OBJECT
+    // The lamp is to be steady cyan whatever the playing clip does with
+    // it: see Conversation, "listening".
+    Q_PROPERTY(bool steadyLamp READ steadyLamp NOTIFY steadyLampChanged)
 
 public:
     // In order of precedence, highest first.
     enum Condition {
-        // Somebody picked a clip by hand (the home page's buttons); the
-        // context is the clip's name. It loops, whatever its kind.
+        // Somebody picked a clip by hand (no page offers that at the
+        // moment); the context is the clip's name. It loops, whatever
+        // its kind.
         Manual,
+        // A realtime voice conversation is going on; the context is its
+        // phase:
+        //   "listening"  the waiting clip, but with the lamp kept steady
+        //                cyan (steadyLamp): the clip's own warm lamp says
+        //                "your approval is needed", and listening is not
+        //                that.
+        //   "thinking"   a work clip - the current goal's if there is one.
+        //   "speaking"   the welcome nod once, then the resting clip.
+        //   anything else ("preparing"): the resting clip.
+        // Above everything the backend reports, because the conversation
+        // is what the user is in the middle of.
+        Conversation,
         Offline,
         Error,
         WaitingUser,
@@ -64,7 +80,9 @@ public:
         // Only while idle; a condition coming up cuts it short.
         Welcome,
         // Plays in full. Dropped while something above Working is set
-        // (no celebrating while offline). Ends the current goal.
+        // (no celebrating while offline or in a conversation). Ends the
+        // goal that was being worked on, unless Working is set (again):
+        // then it is another goal that is done.
         Done,
         // Only while idle; play in full.
         TouchLeft,
@@ -78,20 +96,20 @@ public:
 
     Q_INVOKABLE void set(MascotDirector::Condition condition, const QString &context = QString());
     Q_INVOKABLE void clear(MascotDirector::Condition condition);
-    Q_INVOKABLE void cue(MascotDirector::Cue cue);
+    // False when the cue was dropped: nobody watching, a clip playing
+    // that is not to be cut short, or a condition in the way.
+    Q_INVOKABLE bool cue(MascotDirector::Cue cue);
 
     // The page that shows the mascot reports in: the loaded model's clips
     // in file order and their lengths in milliseconds. The current
     // decision is sent out again, from the start.
     Q_INVOKABLE void stageAttached(const QStringList &clips, const QVariantList &durationsMs);
     Q_INVOKABLE void stageDetached();
-    // The page froze or unfroze the playing clip; the director's clock
-    // stops and resumes with it.
-    Q_INVOKABLE void stagePaused(bool paused);
-
     // Picks one of n idle interludes, returning 0..n-1. Random by
     // default; tests put in something predictable.
     void setPicker(std::function<int(int)> picker) { m_picker = std::move(picker); }
+
+    bool steadyLamp() const { return m_steadyLamp; }
 
     // Length of the cross-fade every directive asks for.
     static constexpr int fadeMs = 225;
@@ -103,14 +121,25 @@ signals:
     // Play `clip` now, looping or once (then holding its last frame),
     // cross-faded over fadeMs from whatever is on screen.
     void directive(const QString &clip, bool loop, int fadeMs);
+    void steadyLampChanged();
 
 private:
     enum Mode { Stopped, FollowingCondition, Reacting, Idling };
 
+    // What a condition asks for: a clip, looping or once - and, for a
+    // clip played once, optionally the clip to loop after it.
+    struct Choice
+    {
+        QString clip;
+        bool loop = true;
+        QString after;
+    };
+
     void resolve();
+    void resolveClip();
     void start(Mode mode, const QString &clip, bool loop, bool timed);
     void onTimeout();
-    QString conditionClip(Condition condition);
+    Choice conditionChoice(Condition condition);
     QString workClip(const QString &goal);
     QString nextInterlude();
 
@@ -124,6 +153,11 @@ private:
     Mode m_mode = Stopped;
     QString m_clip;
     bool m_looping = false;
+    // FollowingCondition: what was asked for (clip and what comes after
+    // it), and what is still to come.
+    QString m_following;
+    QString m_after;
+    bool m_steadyLamp = false;
     // Reacting: whether a condition may cut the reaction short.
     bool m_interruptible = false;
     // Idling: whether an interlude, not the resting clip, is playing.
@@ -138,9 +172,5 @@ private:
     int m_workCursor = 0;
 
     QTimer m_timer;
-    bool m_paused = false;
-    // Left on the clock when the stage was paused, -1 when not paused or
-    // nothing was being timed.
-    int m_pausedRemaining = -1;
     std::function<int(int)> m_picker;
 };

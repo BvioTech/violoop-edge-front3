@@ -81,17 +81,16 @@ int main(int argc, char *argv[])
                      [mascotInputs, status]() { mascotInputs->connectivityProbed(status->connectivityOk()); });
     QObject::connect(sse, &SseClient::connected, mascotInputs, &MascotInputs::eventsConnected);
     QObject::connect(sse, &SseClient::eventReceived, mascotInputs, &MascotInputs::eventReceived);
-    QObject::connect(mascotInputs, &MascotInputs::authorizationStatusWanted, rest,
-                     [rest]() { rest->get(MascotInputs::authorizationStatusPath()); });
-    QObject::connect(rest, &RestClient::requestSucceeded, mascotInputs,
-                     [mascotInputs](const QString &path, int statusCode, const QString &body) {
-                         if (path == MascotInputs::authorizationStatusPath())
-                             mascotInputs->authorizationStatusReceived(statusCode, body);
-                     });
-    QObject::connect(rest, &RestClient::requestFailed, mascotInputs, [mascotInputs](const QString &path) {
-        if (path == MascotInputs::authorizationStatusPath())
-            mascotInputs->authorizationStatusReceived(0, QString());
-    });
+    QObject::connect(mascotInputs, &MascotInputs::snapshotWanted, rest, &RestClient::get);
+    QObject::connect(rest, &RestClient::requestSucceeded, mascotInputs, &MascotInputs::snapshotReceived);
+    QObject::connect(rest, &RestClient::requestFailed, mascotInputs,
+                     [mascotInputs](const QString &path) { mascotInputs->snapshotReceived(path, 0, QString()); });
+    // For looking at a conversation phase without starting a voice
+    // session, e.g. EDGE_KIOSK_MASCOT_CONVERSATION=listening (the
+    // backend's names, see MascotInputs.h). Unset in normal use.
+    const QByteArray conversation = qgetenv("EDGE_KIOSK_MASCOT_CONVERSATION");
+    if (!conversation.isEmpty())
+        mascotInputs->pinConversation(QString::fromLocal8Bit(conversation));
     // SIGUSR1 saves a picture of the window, SIGUSR2 starts or stops the
     // away page's performance recording - see UnixSignalWatcher.h.
     auto *signalWatcher = new UnixSignalWatcher(&engine);

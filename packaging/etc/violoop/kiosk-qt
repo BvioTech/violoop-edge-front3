@@ -29,3 +29,7 @@ EDGE_API_BASE=http://127.0.0.1:9090
 # and its touch handling has not been checked by hand, so it is here for
 # comparison runs, not for normal use.
 #EDGE_KIOSK_QPA=eglfs
+
+# Show the mascot in one phase of a voice conversation (connecting,
+# listening, thinking, speaking) without starting one, to look at it.
+#EDGE_KIOSK_MASCOT_CONVERSATION=listening

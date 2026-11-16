@@ -35,35 +35,28 @@ import EdgeFrontQt.Core
 View3D {
     id: scene
 
-    // Orbit camera: yaw, pitch and distance say where the camera is on a
-    // sphere around `pivot`. Whoever uses the scene moves them (the away
-    // page: by dragging and pinching).
+    // The camera: yaw, pitch and distance say where it is on a sphere
+    // around `pivot`. Fixed.
     //
-    // The defaults reproduce the camera the designer first set this
+    // They reproduce the camera the designer first set this
     // model up for (qt/VioPreview.qml in their 2026-11-13 package): 35
     // degrees of vertical field of view, at (0, 1.10, 5.10), pitched -5.7
     // degrees. That line of sight crosses the character's axis
     // (x = z = 0) at y = 1.10 - 5.10 * tan(5.7deg) ~= 0.59, which is the
     // orbit pivot, 5.10 / cos(5.7deg) ~= 5.125 away. The model itself
     // stands turned by modelYaw, as in their preview (the 2026-11-15
-    // one). minDistance..maxDistance is the preview's zoom range.
+    // one).
     //
     // That 2026-11-15 preview also moved the camera in to 3.85. Not
     // followed: on this panel it puts the laptop and the mug of the
     // "working" clip off the bottom and right edges, and the character
     // covering that much more of the screen costs a quarter of the frame
     // rate (dev1: idle.default 42 fps against 56, working 41 against 56).
-    readonly property real defaultYaw: 0
-    readonly property real defaultPitch: -5.7
+    readonly property real yaw: 0
+    readonly property real pitch: -5.7
     readonly property vector3d pivot: Qt.vector3d(0, 0.59, 0)
-    readonly property real defaultDistance: 5.125
-    readonly property real minDistance: 2.75
-    readonly property real maxDistance: 5.5
+    readonly property real distance: 5.125
     readonly property real modelYaw: 14
-
-    property real yaw: defaultYaw
-    property real pitch: defaultPitch
-    property real distance: defaultDistance
 
     // The model to show. A property so that a different file can be put
     // in without editing the loader (the user-supplied-model feature in
@@ -137,21 +130,83 @@ View3D {
     // node that has meshes under it, switching back on the moment a clip
     // scales the node up again.
     function hideCollapsedNodes() {
+        const lamps = []
+        let steady = null
         function visit(node) {
             let hasMesh = node instanceof Model
             for (let i = 0; i < node.children.length; ++i)
                 hasMesh = visit(node.children[i]) || hasMesh
             if (hasMesh && node !== loader) {
+                const lamp = scene.lampKind(node)
                 const update = function() {
                     const s = node.scale
-                    node.visible = Math.max(Math.abs(s.x), Math.abs(s.y), Math.abs(s.z)) > 0.001
+                    // (Only with a cyan lamp to show instead.)
+                    node.visible = !(lamp && scene.steadyLamp && scene.steadyLampHolder)
+                        && Math.max(Math.abs(s.x), Math.abs(s.y), Math.abs(s.z)) > 0.001
                 }
                 node.scaleChanged.connect(update)
                 update()
+                if (lamp) {
+                    lamps.push(update)
+                    if (lamp === "cool4")
+                        steady = node
+                }
             }
             return hasMesh
         }
         visit(loader)
+        lampUpdates = lamps
+        steadyLampHolder = steady
+        console.log("MascotScene: lamps -", lamps.length, "banks, steady cyan", steady)
+        applySteadyLamp()
+    }
+
+    // The lamp band. The model has one mesh per colour and brightness
+    // step (cyan 1 and 4, warm 2 to 8, grey 0), each under a holder node
+    // of its own, and its clips scale up the holder of the one to show -
+    // which hideCollapsedNodes() turns into visibility. The holders are
+    // marked by their position, as in the designer's qt/VioModel.qml: z
+    // is 0.000312, x says which one it is.
+    //
+    // steadyLamp overrides the clip: the lamp is steady cyan (step 4)
+    // whatever the clip says, and lightPower/warmth - the lights, the
+    // face, the glass - read as the normal state. For the one case where
+    // a clip's motion is wanted without its lamp: the "waiting_user" clip
+    // stands in for listening in a voice conversation, and its warm
+    // breathing lamp means "your approval is needed" (set by the home
+    // page from MascotDirector::steadyLamp).
+    //
+    // The clip keeps scaling the holders all the while, so for the
+    // override the cyan mesh is taken out of its holder and put next to
+    // it (the holder's own offset is the marker, a fraction of a
+    // millimetre), and all holders are hidden.
+    property bool steadyLamp: false
+    property var lampUpdates: []
+    property Node steadyLampHolder: null
+    property Node steadyLampMesh: null
+    onSteadyLampChanged: applySteadyLamp()
+
+    // "" for a node that is not a lamp holder, else e.g. "cool4",
+    // "warm6", "off0".
+    function lampKind(node) {
+        if (node instanceof Model || Math.abs(node.z - 0.000312) > 0.000001
+                || node.children.length === 0 || !(node.children[0] instanceof Model))
+            return ""
+        if (node.x > 0.001)
+            return "off0"
+        return (node.x < 0 ? "warm" : "cool") + (Math.round(Math.abs(node.x) / 0.00005) - 1)
+    }
+
+    function applySteadyLamp() {
+        for (let i = 0; i < lampUpdates.length; ++i)
+            lampUpdates[i]()
+        if (steadyLamp && steadyLampHolder && !steadyLampMesh) {
+            steadyLampMesh = steadyLampHolder.children[0]
+            steadyLampMesh.parent = steadyLampHolder.parent
+        } else if (!steadyLamp && steadyLampMesh) {
+            steadyLampMesh.parent = steadyLampHolder
+            steadyLampMesh = null
+        }
     }
 
     // What the lights and the glass need from the loaded model (see the
@@ -182,8 +237,8 @@ View3D {
     property Model notebookModel: null
     property Model accessoryModel: null
     property Node lightCue: null
-    readonly property real lightPower: lightCue ? lightCue.x : 0.5
-    readonly property real warmth: lightCue ? lightCue.y : 0
+    readonly property real lightPower: lightCue && !steadyLamp ? lightCue.x : 0.5
+    readonly property real warmth: lightCue && !steadyLamp ? lightCue.y : 0
     readonly property bool offline: warmth < -0.5
     readonly property color spill: offline ? Qt.rgba(0.10, 0.11, 0.12, 1)
                                            : Qt.rgba(0.04 + 0.96 * warmth, 0.84 - 0.58 * warmth, 0.94 - 0.91 * warmth, 1)
@@ -263,7 +318,7 @@ View3D {
     }
 
     // The loaded model's animation clips: clips.clipNames,
-    // clips.currentClip, clips.paused, clips.play(name, loop, fadeMs) - see
+    // clips.currentClip, clips.play(name, loop, fadeMs) - see
     // src/ClipPlayer.h.
     readonly property ClipPlayer clips: ClipPlayer {}
 
@@ -440,6 +495,9 @@ View3D {
             scene.notebookModel = null
             scene.accessoryModel = null
             scene.lightCue = null
+            scene.lampUpdates = []
+            scene.steadyLampHolder = null
+            scene.steadyLampMesh = null
             scene.clips.detach()
             if (status === RuntimeLoader.Success) {
                 scene.findRig()
