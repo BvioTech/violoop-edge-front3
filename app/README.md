@@ -37,6 +37,7 @@ app/
 │                        留作轻量基准。
 ├── scripts/
 │   ├── launch-under-weston.sh   # 开发用，env var 可覆盖路径
+│   ├── launch-eglfs.sh          # 开发用，不经 weston 直接上 KMS（对比用）
 │   └── build-deb.sh              # 打包，见下
 ├── packaging/         # .deb 的 staging 内容
 └── docs/
@@ -55,10 +56,98 @@ QT_QPA_PLATFORM=offscreen timeout 5 ./build/violoop_edge_kiosk_qt
 
 # 真机：临时顶替 violoop-edge-kiosk.service 的 ExecStart
 ./scripts/launch-under-weston.sh
+# 或者不经 weston（见下方"不经 weston（eglfs）"）
+./scripts/launch-eglfs.sh
 ```
 
 链接 `/opt/violoop-qt6`（`violoop-qt6` 包），不是系统 `qt6-*` 包——后者
 在这台设备上有 GLES/ESSL100 版本协商问题。
+
+## 截图
+
+给应用进程发 `SIGUSR1`，它会把自己的窗口存成 PNG（`core/ScreenshotOnSignal`），
+已经转正，不用再旋转：
+
+```bash
+sudo kill -USR1 "$(systemctl show -p MainPID --value violoop-edge-kiosk-qt)"
+# -> /var/lib/violoop-edge-kiosk-qt/screenshot-<日期>-<时间>.png
+#    路径同时记在日志里：journalctl -u violoop-edge-kiosk-qt | grep ScreenshotOnSignal
+```
+
+截图由应用自己完成，不依赖 `weston-screenshooter`，所以在 eglfs 下也能用。
+文件不会自动清理，用完请自己删。
+
+`SIGUSR2` 是另一个命令：开始或停止待机页的性能记录，见"性能标杆"的"复现"。
+启动脚本在应用起来之前忽略这两个信号，所以服务刚重启时发过去只会被丢掉，
+不会把服务杀掉。
+
+## 不经 weston（eglfs）
+
+**结论（2026-11-14，dev1 实测）：能跑，但待机页慢约 20%，默认继续走 weston。**
+开关和脚本留着，供以后换驱动或换场景时重测。
+
+weston 在这里只服务一个全屏窗口：旋转是 `qml/AppShell.qml` 自己做的，息屏
+靠直接操作背光，面板只有一个固定模式（见"性能标杆"）。去掉它可以少一个
+约 58 MB 的常驻进程和一个包依赖，这是当初想去掉它的理由。
+
+打开方式（装好的包）：在 `/etc/violoop/kiosk-qt` 里设
+`EDGE_KIOSK_QPA=eglfs`，然后 `sudo systemctl restart violoop-edge-kiosk-qt`。
+去掉这一行就回到 weston。本地构建用 `scripts/launch-eglfs.sh`。
+
+**实测**
+
+同一个二进制（提交 `1ea67a0`）、同一场景（待机页 `idle.default`，MSAA High +
+probe），只换启动脚本，各跑约 1 分钟：
+
+| | 帧率（平均 / 最低） | GPU 负载 | 每帧周期 | 其中 swap |
+| --- | --- | --- | --- | --- |
+| weston | 56.1 / 48.8 fps | 80% | 17.1 ms | 13.9 ms |
+| eglfs | 44.0 / 39.8 fps | 65% | 21.8 ms | 18.8 ms |
+| eglfs + `QT_QPA_EGLFS_KMS_ATOMIC=1` | 约 46 fps | - | 21.3 ms | 18.5 ms |
+
+- eglfs 下画面正确，应用自己拿到 DSI-1，libinput 认出了触摸屏
+  （`focaltech_ft3519`），`SIGUSR1` 截图可用。触摸对齐和手势没有用手测。
+- 慢不是因为算力不够：GPU 已在最高频（900 MHz）而负载只有 65%，CPU 也有
+  余量。每帧渲染提交只要约 2 ms，时间花在 swap 上。
+- 推断的原因（没有工具直接证实，设备上没有 strace/perf）：libmali 的 GBM
+  平台上 `eglSwapBuffers` 要等 GPU 把这一帧画完才返回，CPU 准备下一帧和
+  GPU 画这一帧不能并行，每帧约 8 ms CPU + 14 ms GPU 串行成 22 ms；Wayland
+  平台不等，两者重叠，周期就是 GPU 的约 17 ms。依据：在渲染后立刻
+  `glFlush` 让 GPU 提前开工，总周期不变（22.3 ms），只是时间从 swap 挪到了
+  render（render 2 → 8 ms，swap 19 → 13 ms，且 swap 集中在 13 ms）。
+- 所以这是驱动（`libmali-bifrost-g52-g24p0-x11-wayland-gbm` 1.9-3）的行为，
+  不是 Qt 的参数能调的；没有在 libmali 里找到相关开关。
+- 轻场景不受影响：`qt3d-spike` 的旋转立方体在 eglfs 下是 59–60 fps。GPU
+  时间接近或超过一帧的场景才会吃这个亏。
+
+**抗锯齿在两种后端下都生效（2026-11-16）**
+
+怀疑过 eglfs 下 MSAA 没起作用，于是在 dev1 上对 weston/eglfs × MSAA High/
+关闭四种组合各截了 5 张图（`SIGUSR1`，默认视角）放大对比，并经人眼在屏幕上
+确认：
+
+- 开 MSAA 时模型外轮廓平滑，关掉后是阶梯，weston 和 eglfs 表现一致。
+- 模型内部的细线（青色发光边、面罩边缘的细高光）在四种组合下都有锯齿：
+  MSAA 只处理几何轮廓，不处理材质和高光内部的走样。看着"像没开抗锯齿"的
+  就是这部分。
+- eglfs 下关掉 MSAA，帧率从 45.1 fps / GPU 65% 升到 58.6 fps / GPU 46%
+  （`idle.default`，各约 1 分钟）。也就是 eglfs 的差距只在 GPU 时间接近一帧
+  时出现，和上面的推断一致。
+- 当时两种后端的界面字体不同：Qt 的默认字体族由平台插件决定，wayland 是
+  "Sans Serif"（设备上解析成 Noto Sans），eglfs 是 DejaVu，后者更宽，按钮和
+  行距都跟着变。现在 `main.cpp` 统一指定 "Sans Serif"，两边的排版一致
+  （dev1 截图对比确认；字形的细微渲染差异还在）。3D 模型本身的渲染看不出
+  区别。
+
+截图取的是应用自己渲染出的画面，不经过面板。
+
+逐帧耗时的取法：给服务加
+`Environment="QT_LOGGING_RULES=qt.scenegraph.time.renderloop=true"`，开发用的
+两个启动脚本都会沿用它，日志在 `$RUNTIME_DIRECTORY/app.log`。
+
+已知的坑：`eglfs_kms` 自己选设备会选到 `/dev/dri/card1`（Mali 渲染节点）
+然后报 "no screens available"，必须指定 `card0`，启动脚本已经处理
+（来历见 `../qt3d-spike/docs/findings.md` 的"EGLFS QPA"一节）。
 
 ## 日志
 
@@ -84,6 +173,13 @@ QT_QPA_PLATFORM=offscreen timeout 5 ./build/violoop_edge_kiosk_qt
 - 设备：dev1，Violoop RK3576 VLA11（8 核，8 GB 内存，Mali GPU），
   面板 1080×1240@60Hz，Qt `6.8.5-violoop3`，weston kiosk-shell
   （`repaint-window` 为默认值，见下）。
+- 面板刷新率固定 60Hz，没有别的档位（2026-11-14 在 dev1 上只读确认）：
+  `/sys/class/drm/card0-DSI-1/modes` 和 weston 启动日志都只有
+  `1080x1240@60.0` 一个模式；面板是 `simple-panel-dsi`，设备树里只有
+  `timing0` 一组时序（像素时钟 84,296,640 Hz，总行列 1108×1268，正好
+  60.000 Hz）；EDID 为空，模式全部来自设备树。CRTC 上有
+  `variable refresh rate` 等属性（eglfs 的日志里列出，值为 0，即未启用），
+  没有试过打开。
 - 模型：`assets/away/VIO_DesktopPet.glb` 减面版（7.5 万面，19 段动画），
   全程播放 `idle.default`。
 - 渲染设置：MSAA High、六盏灯、设计师的场景——环境光
@@ -168,20 +264,29 @@ GPU 负载（35%–74%），不改变帧率；去掉上限之后它们对帧率�
 
 **复现**
 
-待机页打开期间自动记录到
-`/var/lib/violoop-edge-kiosk-qt/away-perf-<日期>-<时间>.csv`（列的含义见
-`core/PerfRecorder.h`），页面右上角同时显示实时读数。无人值守烤机时让
-kiosk 启动后直接进待机页：
+待机页右上角一直显示实时读数。写文件默认是关的，要显式打开：
+
+```bash
+# 开始记录；再发一次停止
+sudo kill -USR2 "$(systemctl show -p MainPID --value violoop-edge-kiosk-qt)"
+# -> /var/lib/violoop-edge-kiosk-qt/away-perf-<日期>-<时间>.csv
+```
+
+列的含义见 `core/PerfRecorder.h`。只有待机页开着的时候才有数据写入；
+每次开始记录都新建一个文件，用完请自己删，没有自动清理。
+
+无人值守烤机时让 kiosk 启动后直接进待机页并开始记录：
 
 ```bash
 sudo mkdir -p /etc/systemd/system/violoop-edge-kiosk-qt.service.d
-printf '[Service]\nEnvironment=EDGE_KIOSK_OPEN_PAGE=AwayPage.qml\n' \
+printf '[Service]\nEnvironment=EDGE_KIOSK_OPEN_PAGE=AwayPage.qml\nEnvironment=EDGE_KIOSK_RECORD_PERF=1\n' \
   | sudo tee /etc/systemd/system/violoop-edge-kiosk-qt.service.d/burn-in.conf
 sudo systemctl daemon-reload && sudo systemctl restart violoop-edge-kiosk-qt
 # 结束后删掉 burn-in.conf，再 daemon-reload 并重启服务
 ```
 
-服务中途重启会另起一个新 CSV，所以文件数大于 1 就说明烤机期间重启过。
+用环境变量而不是信号，是因为服务中途重启后信号打开的记录不会恢复。
+重启会另起一个新 CSV，所以文件数大于 1 就说明烤机期间重启过。
 
 ## 打包
 

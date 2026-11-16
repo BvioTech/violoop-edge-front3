@@ -11,10 +11,19 @@ class SystemStats;
 // second, for long unattended runs (burn-in): is the frame rate holding,
 // is memory creeping up, where does the temperature settle.
 //
-// qml/AwayPage.qml drives it: start() when the page comes up, record()
-// on the same one-second tick that updates the on-screen numbers (the
-// page supplies what only it knows - frame rate and the clip playing -
-// the rest comes from SystemStats), stop() when the page goes away.
+// Recording is off unless asked for, so that a device in normal use does
+// not fill its state directory:
+//
+//   sudo kill -USR2 "$(systemctl show -p MainPID --value violoop-edge-kiosk-qt)"
+//
+// starts it, and the same command again stops it (main.cpp, through
+// UnixSignalWatcher). EDGE_KIOSK_RECORD_PERF=1 in the service's
+// environment starts it with the app, for runs nobody is watching.
+//
+// qml/AwayPage.qml feeds it: record() on the same one-second tick that
+// updates the on-screen numbers (the page supplies what only it knows -
+// frame rate and the clip playing - the rest comes from SystemStats).
+// Nothing is written while that page is not open.
 //
 // Every start() begins a new file, away-perf-<date>-<time>.csv, in the
 // service's state directory (systemd's $STATE_DIRECTORY, i.e.
@@ -47,6 +56,8 @@ public:
 
     Q_INVOKABLE bool start();
     Q_INVOKABLE void stop();
+    // start() when not recording, stop() when recording.
+    void toggle();
     Q_INVOKABLE void record(qreal fps, const QString &clip, bool paused);
 
 signals:

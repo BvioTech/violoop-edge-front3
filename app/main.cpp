@@ -1,3 +1,4 @@
+#include <QFont>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -6,12 +7,16 @@
 #include "core/NavController.h"
 #include "core/PerfRecorder.h"
 #include "core/RestClient.h"
+#include "core/ScreenshotOnSignal.h"
 #include "core/SseClient.h"
 #include "core/StatusStore.h"
 #include "core/SystemStats.h"
 #include "core/TestVerdictStore.h"
 #include "core/TimelineLoopCloser.h"
+#include "core/UnixSignalWatcher.h"
 #include "core/UpgradeStore.h"
+
+#include <signal.h>
 
 int main(int argc, char *argv[])
 {
@@ -19,6 +24,15 @@ int main(int argc, char *argv[])
     installJournalLogHandler();
 
     QGuiApplication app(argc, argv);
+
+    // Ask for the same font family whichever way the app reaches the
+    // screen. Left alone, the wayland plugin's default is "Sans Serif"
+    // (Noto Sans on the device) but eglfs's is DejaVu, which is wider and
+    // would shift every page's layout. "Sans Serif" keeps what the pages
+    // were laid out with under weston.
+    QFont font = app.font();
+    font.setFamily(QStringLiteral("Sans Serif"));
+    app.setFont(font);
 
     QQmlApplicationEngine engine;
 
@@ -37,6 +51,18 @@ int main(int argc, char *argv[])
     auto *timelineLoopCloser = new TimelineLoopCloser(&engine);
     auto *systemStats = new SystemStats(&engine);
     auto *perfRecorder = new PerfRecorder(systemStats, &engine);
+    // SIGUSR1 saves a picture of the window, SIGUSR2 starts or stops the
+    // away page's performance recording - see UnixSignalWatcher.h.
+    auto *signalWatcher = new UnixSignalWatcher(&engine);
+    new ScreenshotOnSignal(signalWatcher, &engine);
+    QObject::connect(signalWatcher, &UnixSignalWatcher::received, perfRecorder, [perfRecorder](int signalNumber) {
+        if (signalNumber == SIGUSR2)
+            perfRecorder->toggle();
+    });
+    // For unattended runs (burn-in): record from the start, so that a
+    // restart of the service does not silently end the recording.
+    if (qEnvironmentVariableIntValue("EDGE_KIOSK_RECORD_PERF"))
+        perfRecorder->start();
 
     engine.rootContext()->setContextProperty("nav", nav);
     engine.rootContext()->setContextProperty("restClient", rest);

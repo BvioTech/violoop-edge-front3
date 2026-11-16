@@ -11,6 +11,10 @@
 # afterwards.
 set -uo pipefail
 
+# See the packaged launcher: SIGUSR1 and SIGUSR2 are commands to the
+# app and must not kill this script, or weston, before the exec.
+trap '' USR1 USR2
+
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN="${EDGE_QT_BIN:-$APP_DIR/build/violoop_edge_kiosk_qt}"
 
@@ -24,7 +28,7 @@ export WAYLAND_DISPLAY=wayland-0
 export QT_QPA_PLATFORM=wayland
 export QT_WAYLAND_DISABLE_WINDOWDECORATION=1
 export QSG_RHI_BACKEND=opengl
-export QT_LOGGING_RULES="qt.qpa.*=true;qt.scenegraph.general=true"
+export QT_LOGGING_RULES="${QT_LOGGING_RULES:-qt.qpa.*=true;qt.scenegraph.general=true}"
 
 rm -f "$XDG_RUNTIME_DIR/wayland-0" "$XDG_RUNTIME_DIR/wayland-0.lock"
 
