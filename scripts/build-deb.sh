@@ -23,7 +23,14 @@ if [ ! -d "$QT_PREFIX" ]; then
 fi
 
 PKG_NAME=$(awk -F': *' '/^Package:/{print $2; exit}' "$APP_DIR/packaging/debian/control")
-VERSION=$(awk -F': *' '/^Version:/{print $2; exit}' "$APP_DIR/packaging/debian/control")
+# The version comes from ./version.txt (bumped by scripts/version.sh); the
+# control file only holds VERSION_PLACEHOLDER, filled in below when the
+# staged copy is written.
+VERSION=$(tr -d '[:space:]' < "$APP_DIR/version.txt")
+if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "error: $APP_DIR/version.txt holds '$VERSION', expected MAJOR.MINOR.PATCH" >&2
+  exit 2
+fi
 
 echo "Building $PKG_NAME $VERSION for $ARCH"
 
@@ -57,8 +64,13 @@ mkdir -p "$STAGE/DEBIAN" \
 # copy - just the one executable.
 install -m 0755 "$BIN" "$STAGE/opt/violoop-edge-kiosk-qt/violoop_edge_kiosk_qt"
 
-sed "s/Architecture: ARCH_PLACEHOLDER/Architecture: $ARCH/" \
+sed -e "s/Architecture: ARCH_PLACEHOLDER/Architecture: $ARCH/" \
+    -e "s/Version: VERSION_PLACEHOLDER/Version: $VERSION/" \
     "$APP_DIR/packaging/debian/control" > "$STAGE/DEBIAN/control"
+if grep -q '_PLACEHOLDER' "$STAGE/DEBIAN/control"; then
+  echo "error: unfilled placeholder left in $STAGE/DEBIAN/control" >&2
+  exit 1
+fi
 install -m 0755 "$APP_DIR/packaging/debian/postinst" "$STAGE/DEBIAN/postinst"
 install -m 0755 "$APP_DIR/packaging/debian/prerm" "$STAGE/DEBIAN/prerm"
 install -m 0755 "$APP_DIR/packaging/debian/postrm" "$STAGE/DEBIAN/postrm"

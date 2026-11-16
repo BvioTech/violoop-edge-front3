@@ -324,6 +324,11 @@ bash scripts/build-deb.sh arm64
 # -> output/violoop-edge-kiosk-qt_<version>_arm64.deb
 ```
 
+版本号在仓库根目录的 `version.txt` 文件里，打包时由 `scripts/build-deb.sh` 读取。
+发版用 `scripts/version.sh [major|minor|patch]`（默认 patch）：它推进
+`version.txt`、提交、打 `v<版本>` tag 并一起推送，工作区不干净时拒绝执行；
+`DRY_RUN=1` 只打印下一个版本号。
+
 CI（`.github/workflows/build-release.yml`，仓库根目录）：`ubuntu-22.04-arm`
 原生 runner、`v*` tag 触发发布（创建 GitHub Release；apt 仓轮询收录，
 流水线不再发 webhook）。
