@@ -33,14 +33,13 @@ Comment:
  released by BvioTech under the same license as the program.
 
 Files: assets/away/VIO_DesktopPet.glb
-Copyright: PROVENANCE_PENDING
-License: PROVENANCE_PENDING
+Copyright: 2026 BvioTech
+License: LicenseRef-BvioTech-Proprietary
 Comment:
- Embedded in the binary via the Qt resource system. The mascot model was
- delivered by the mascot's designer together with the files above; its
- license is being confirmed
- (https://github.com/BvioTech/violoop-edge-front3/issues/17) and this
- paragraph will be completed once it is.
+ The mascot model, made for BvioTech by its designer. It is stored inside
+ the executable via the Qt resource system and read from there at run
+ time as data (a glTF file); it is not part of the program's code and is
+ not covered by the program's GPL license.
 
 License: GPL-3.0-or-later
  This program is free software: you can redistribute it and/or modify it
@@ -55,3 +54,11 @@ License: GPL-3.0-or-later
  .
  On Debian systems, the complete text of the GNU General Public License
  version 3 can be found in "/usr/share/common-licenses/GPL-3".
+
+License: LicenseRef-BvioTech-Proprietary
+ All rights reserved. This file is proprietary to BvioTech and is not
+ licensed under the GNU General Public License or any other open-source
+ license. It is distributed only as part of this package, for use by the
+ program it contains; no permission is granted to copy, modify or
+ redistribute it separately, or to use it in other works, without
+ BvioTech's prior written permission.
