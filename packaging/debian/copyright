@@ -24,23 +24,23 @@ License: GPL-3.0-or-later
 Files: assets/away/visor-studio.hdr
  assets/away/display-studio.hdr
  assets/away/optical-studio.hdr
+ assets/away/canopy.frag
 Copyright: 2026 BvioTech
-License: LicenseRef-BvioTech-Proprietary
+License: GPL-3.0-or-later
 Comment:
- Embedded in the binary via the Qt resource system. Lighting images made
- for BvioTech by the mascot's designer. They are data the program reads,
- not part of its code, and are not covered by the program's GPL license.
+ Embedded in the binary via the Qt resource system. Three lighting images
+ and the glass shader, made for BvioTech by the mascot's designer and
+ released by BvioTech under the same license as the program.
 
 Files: assets/away/VIO_DesktopPet.glb
- assets/away/canopy.frag
 Copyright: PROVENANCE_PENDING
 License: PROVENANCE_PENDING
 Comment:
- Embedded in the binary via the Qt resource system. The mascot model and
- the glass shader were delivered by the mascot's designer together with
- the images above; their authorship and license are being confirmed
+ Embedded in the binary via the Qt resource system. The mascot model was
+ delivered by the mascot's designer together with the files above; its
+ license is being confirmed
  (https://github.com/BvioTech/violoop-edge-front3/issues/17) and this
- paragraph will be completed once they are.
+ paragraph will be completed once it is.
 
 License: GPL-3.0-or-later
  This program is free software: you can redistribute it and/or modify it
@@ -55,11 +55,3 @@ License: GPL-3.0-or-later
  .
  On Debian systems, the complete text of the GNU General Public License
  version 3 can be found in "/usr/share/common-licenses/GPL-3".
-
-License: LicenseRef-BvioTech-Proprietary
- All rights reserved. These files are proprietary to BvioTech and are not
- licensed under the GNU General Public License or any other open-source
- license. They are distributed only as part of this package, for use by
- the program it contains; no permission is granted to copy, modify or
- redistribute them separately, or to use them in other works, without
- BvioTech's prior written permission.
