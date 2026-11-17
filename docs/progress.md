@@ -79,7 +79,7 @@ spike 存在的理由（见 `../../README.md` 的 GPL-3 许可说明：就是因
 Quick3D 的角色动画能力）。
 
 - **模型资产**：`assets/away/CesiumMan.glb`，Khronos
-  glTF-Sample-Models 的 CesiumMan（CC0），和 `qt3d-spike` 真机测试
+  glTF-Sample-Models 的 CesiumMan（CC-BY 4.0），和 `qt3d-spike` 真机测试
   （含 6 小时长测）用的是同一个文件——占位，产品还没有正式的吉祥物 3D
   模型。用户已确认这个阶段先用占位模型把渲染管线/导航接起来，真实模型
   以后替换 `RuntimeLoader.source` 和这个文件即可。

@@ -6,6 +6,7 @@ Architecture: ARCH_PLACEHOLDER
 Maintainer: doctor <doctor@bvio.ai>
 Depends: violoop-qt6 (>= 6.8.5-violoop3), weston, fonts-noto-cjk, fonts-noto-core, fonts-dejavu-core, fonts-noto-color-emoji, libstdc++6
 Replaces: violoop-edge-front
+Homepage: https://github.com/BvioTech/violoop-edge-front3
 Description: Violoop Edge device kiosk UI (Qt/QML, evaluation build)
  Qt/QML reimplementation of the device kiosk front-end, evaluating
  replacing the production Flutter app (violoop-edge-front /

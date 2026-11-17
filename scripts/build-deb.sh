@@ -56,7 +56,8 @@ mkdir -p "$STAGE/DEBIAN" \
     "$STAGE/opt/violoop-edge-kiosk-qt" \
     "$STAGE/etc/violoop" \
     "$STAGE/usr/bin" \
-    "$STAGE/usr/lib/systemd/system"
+    "$STAGE/usr/lib/systemd/system" \
+    "$STAGE/usr/share/doc/$PKG_NAME"
 
 # The whole QML tree is compiled into the binary via Qt's resource system
 # (qt_add_qml_module without a lazy/loose-file option), so unlike
@@ -80,6 +81,22 @@ install -m 0755 "$APP_DIR/packaging/usr/bin/violoop-edge-kiosk-qt-launch" \
     "$STAGE/usr/bin/violoop-edge-kiosk-qt-launch"
 install -m 0644 "$APP_DIR/packaging/usr/lib/systemd/system/violoop-edge-kiosk-qt.service" \
     "$STAGE/usr/lib/systemd/system/violoop-edge-kiosk-qt.service"
+
+# The license notice and where the source is (this is a GPL binary, so
+# both have to travel with it). The GPL's own text is not copied in: the
+# file points at /usr/share/common-licenses/GPL-3, which base-files
+# provides on every Debian system. The version placeholder becomes the
+# git tag this build's source is at.
+sed -e "s/VERSION_PLACEHOLDER/$VERSION/" \
+    "$APP_DIR/packaging/debian/copyright" > "$STAGE/usr/share/doc/$PKG_NAME/copyright"
+chmod 0644 "$STAGE/usr/share/doc/$PKG_NAME/copyright"
+if grep -q 'VERSION_PLACEHOLDER' "$STAGE/usr/share/doc/$PKG_NAME/copyright"; then
+  echo "error: unfilled placeholder left in the staged copyright file" >&2
+  exit 1
+fi
+if grep -q 'PROVENANCE_PENDING' "$STAGE/usr/share/doc/$PKG_NAME/copyright"; then
+  echo "warning: packaging/debian/copyright still has PROVENANCE_PENDING for the embedded assets (issue #17)" >&2
+fi
 
 OUT_DIR="$APP_DIR/output"
 OUT_DEB="$OUT_DIR/${PKG_NAME}_${VERSION}_${ARCH}.deb"
