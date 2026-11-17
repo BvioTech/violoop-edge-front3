@@ -53,7 +53,7 @@ fi
 STAGE="$APP_DIR/output/stage-$ARCH"
 rm -rf "$STAGE"
 mkdir -p "$STAGE/DEBIAN" \
-    "$STAGE/opt/violoop-edge-kiosk-qt" \
+    "$STAGE/opt/violoop-edge-kiosk-qt/assets/away" \
     "$STAGE/etc/violoop" \
     "$STAGE/usr/bin" \
     "$STAGE/usr/lib/systemd/system" \
@@ -61,9 +61,21 @@ mkdir -p "$STAGE/DEBIAN" \
 
 # The whole QML tree is compiled into the binary via Qt's resource system
 # (qt_add_qml_module without a lazy/loose-file option), so unlike
-# edge-front2's Flutter bundle there's no separate asset directory to
-# copy - just the one executable.
+# edge-front2's Flutter bundle there's no asset directory to copy - with
+# one exception, the mascot model below.
 install -m 0755 "$BIN" "$STAGE/opt/violoop-edge-kiosk-qt/violoop_edge_kiosk_qt"
+
+# The mascot model is proprietary, so it is kept out of the GPL binary and
+# shipped as a file beside it, where main.cpp looks for it (see
+# CMakeLists.txt). A git-lfs checkout without the LFS content leaves a
+# small text pointer here instead of the model; a binary glTF file starts
+# with the four bytes "glTF".
+MODEL="$APP_DIR/assets/away/VIO_DesktopPet.glb"
+if [ "$(head -c 4 "$MODEL")" != "glTF" ]; then
+  echo "error: $MODEL is not a binary glTF file (git-lfs content not fetched?)" >&2
+  exit 1
+fi
+install -m 0644 "$MODEL" "$STAGE/opt/violoop-edge-kiosk-qt/assets/away/VIO_DesktopPet.glb"
 
 sed -e "s/Architecture: ARCH_PLACEHOLDER/Architecture: $ARCH/" \
     -e "s/Version: VERSION_PLACEHOLDER/Version: $VERSION/" \

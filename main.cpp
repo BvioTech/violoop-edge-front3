@@ -115,6 +115,14 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("systemStats", systemStats);
     engine.rootContext()->setContextProperty("perfRecorder", perfRecorder);
     engine.rootContext()->setContextProperty("mascot", mascot);
+    // The mascot model is a file beside the executable, not a resource
+    // inside it: it is proprietary and has to stay out of this GPL binary
+    // (see CMakeLists.txt). qml/MascotScene.qml loads it from this URL.
+    const QString mascotModelPath =
+        QCoreApplication::applicationDirPath() + QStringLiteral("/assets/away/VIO_DesktopPet.glb");
+    if (!QFile::exists(mascotModelPath))
+        qWarning() << "main: the mascot model is missing:" << mascotModelPath;
+    engine.rootContext()->setContextProperty("mascotModelUrl", QUrl::fromLocalFile(mascotModelPath));
 
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed,

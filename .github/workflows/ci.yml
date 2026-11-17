@@ -24,8 +24,8 @@ jobs:
           lfs: true
           # Without this, assets/away/VIO_DesktopPet.glb (tracked via
           # git-lfs, see ../../.gitattributes) checks out as a tiny LFS
-          # pointer stub instead of real glTF bytes - CMake's RESOURCES
-          # step would embed the stub as-is (no error), and the offscreen
+          # pointer stub instead of real glTF bytes - CMake would
+          # copy the stub beside the binary as-is (no error), and the offscreen
           # smoke test below would only fail with RuntimeLoader's generic
           # "No suitable reader found" error, same confusing failure mode
           # qt3d-spike's fetch-assets.sh already hit once for a truncated

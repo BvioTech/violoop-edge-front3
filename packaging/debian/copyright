@@ -29,17 +29,18 @@ Copyright: 2026 BvioTech
 License: GPL-3.0-or-later
 Comment:
  Embedded in the binary via the Qt resource system. Three lighting images
- and the glass shader, made for BvioTech by the mascot's designer and
- released by BvioTech under the same license as the program.
+ and the glass shader, made by BvioTech and released under the same
+ license as the program.
 
 Files: assets/away/VIO_DesktopPet.glb
 Copyright: 2026 BvioTech
 License: LicenseRef-BvioTech-Proprietary
 Comment:
- The mascot model, made for BvioTech by its designer. It is stored inside
- the executable via the Qt resource system and read from there at run
- time as data (a glTF file); it is not part of the program's code and is
- not covered by the program's GPL license.
+ The mascot model, made by BvioTech. It is not part of the executable:
+ it is installed as a separate file,
+ /opt/violoop-edge-kiosk-qt/assets/away/VIO_DesktopPet.glb, which the
+ program reads at run time as data (a glTF file). It is not covered by
+ the program's GPL license.
 
 License: GPL-3.0-or-later
  This program is free software: you can redistribute it and/or modify it

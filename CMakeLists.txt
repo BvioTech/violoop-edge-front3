@@ -68,12 +68,7 @@ qt_add_qml_module(violoop_edge_kiosk_qt
         qml/DebugWifiPage.qml
         qml/VersionPage.qml
     RESOURCES
-        # The designer's mascot model, loaded by qml/HomePage.qml. Tracked
-        # via git-lfs (see .gitattributes), not fetched by a script like
-        # demos/qt3d-spike's assets: it ships inside the installed app, so it has
-        # to be a real committed asset, not a dev-time-only download.
-        assets/away/VIO_DesktopPet.glb
-        # What that model's clips are for, read by main.cpp for
+        # What the mascot model's clips are for, read by main.cpp for
         # src/MascotDirector (format: src/ActionCatalog.h).
         assets/away/actions.json
         # The designer's scene resources for qml/HomePage.qml, as shipped
@@ -85,6 +80,15 @@ qt_add_qml_module(violoop_edge_kiosk_qt
         assets/away/optical-studio.hdr
         assets/away/canopy.frag
 )
+
+# The mascot model is deliberately NOT in RESOURCES above: it is BvioTech's
+# proprietary asset, not under this program's GPL license (see
+# packaging/debian/copyright), so it stays a file of its own that the
+# program reads at run time instead of becoming part of the executable.
+# main.cpp looks for it at assets/away/ beside the executable; this puts a
+# copy there in the build directory, and scripts/build-deb.sh installs it
+# the same way. Tracked via git-lfs (see .gitattributes).
+configure_file(assets/away/VIO_DesktopPet.glb assets/away/VIO_DesktopPet.glb COPYONLY)
 
 target_link_libraries(violoop_edge_kiosk_qt PRIVATE
     Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Network Qt6::Quick3D

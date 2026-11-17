@@ -48,8 +48,8 @@
 │                        给的吉祥物模型（20 段动画），actions.json 说明
 │                        各段动画的用途；CesiumMan.glb 是之前
 │                        的占位模型（Khronos glTF-Sample-Models，CC-BY 4.0），
-│                        文件还在仓库里，但不再打进应用（要用它得先
-│                        加回 CMakeLists.txt 的 RESOURCES）。
+│                        文件还在仓库里，但不随应用安装（要用它得让
+│                        MascotScene 的 modelSource 指向它）。
 ├── scripts/
 │   ├── launch-dev.sh            # 开发用：用包里的同一个启动脚本跑本地
 │   │                              构建，参数 wayland（默认）或 eglfs
@@ -358,14 +358,13 @@ sudo systemctl enable --now violoop-edge-kiosk-qt.service
   `X.Y.Z` 对应本仓库的 git tag `vX.Y.Z`。
 - 运行时依赖的 `violoop-qt6`（Qt 6.8.5）是另一个包，构建脚本和各模块
   的上游 ref 在 <https://github.com/BvioTech/violoop-qt-build>。
-- 打进二进制的三张 HDR（`assets/away/*.hdr`）和 `canopy.frag` 是设计师
-  为 BvioTech 制作的，版权归 BvioTech，和代码一样按 GPL-3.0-or-later
-  发布。
-- **吉祥物模型不在 GPL 之内**：`assets/away/VIO_DesktopPet.glb` 是设计师
-  为 BvioTech 制作的专有素材，版权归 BvioTech，保留所有权利，仓库公开
-  不等于授权他人使用；条款见 `copyright` 的
-  `LicenseRef-BvioTech-Proprietary`。它是程序运行时读取的 glTF 数据，
-  但目前通过 Qt 资源系统存放在可执行文件里（`CMakeLists.txt` 的
-  `RESOURCES`）。
+- 打进二进制的三张 HDR（`assets/away/*.hdr`）和 `canopy.frag` 由 BvioTech
+  制作，和代码一样按 GPL-3.0-or-later 发布。
+- **吉祥物模型不在 GPL 之内**：`assets/away/VIO_DesktopPet.glb` 是 BvioTech
+  制作的专有素材，保留所有权利，仓库公开不等于授权他人使用；条款见
+  `copyright` 的 `LicenseRef-BvioTech-Proprietary`。它不打进二进制：
+  构建时拷到可执行文件旁的 `assets/away/`，deb 里装在
+  `/opt/violoop-edge-kiosk-qt/assets/away/`，程序运行时从那里读取
+  （`main.cpp` 的 `mascotModelUrl`）。
 - `assets/away/CesiumMan.glb` 是 CC-BY 4.0（Cesium 捐赠，另有 Cesium
   商标条款），不打进发布包。
