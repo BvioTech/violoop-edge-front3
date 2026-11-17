@@ -25,8 +25,8 @@ import EdgeFrontQt.Core
 // once the model has loaded - see that header.
 //
 // Asset: assets/away/VIO_DesktopPet.glb, the designer's mascot model
-// (tracked via git-lfs, see ../.gitattributes, and listed in
-// CMakeLists.txt's RESOURCES). Unlike the CesiumMan placeholder it
+// (tracked via git-lfs, see ../.gitattributes). It is a file beside the
+// executable, not a resource inside it - see CMakeLists.txt. Unlike the CesiumMan placeholder it
 // replaced (one walk cycle), it carries 20 clips named by event
 // ("idle.default", "welcome", "touch.left", ...). RuntimeLoader only ever
 // shows the first one by itself; `clips` switches between them. Which
@@ -61,7 +61,8 @@ View3D {
     // The model to show. A property so that a different file can be put
     // in without editing the loader (the user-supplied-model feature in
     // ../docs/user-model-spec.md will need that).
-    property url modelSource: Qt.resolvedUrl("../assets/away/VIO_DesktopPet.glb")
+    // The built-in one is the file main.cpp found beside the executable.
+    property url modelSource: mascotModelUrl
 
     // "loading" until the model is on screen, then "ready"; "error" if the
     // file could not be loaded.

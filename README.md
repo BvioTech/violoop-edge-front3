@@ -1,6 +1,6 @@
 # edge-front3 — violoop-edge-kiosk-qt
 
-许可证：[GPL-3.0](LICENSE)。
+许可证：[GPL-3.0-or-later](LICENSE)，吉祥物模型为专有素材，见文末“许可说明”。
 
 设备触控屏 kiosk 前端，Qt/QML 实现，不要求视觉 1:1（无设计稿）。
 
@@ -47,9 +47,9 @@
 │                        .gitattributes）。VIO_DesktopPet.glb 是设计师
 │                        给的吉祥物模型（20 段动画），actions.json 说明
 │                        各段动画的用途；CesiumMan.glb 是之前
-│                        的占位模型（Khronos glTF-Sample-Models，CC0），
-│                        文件还在仓库里，但不再打进应用（要用它得先
-│                        加回 CMakeLists.txt 的 RESOURCES）。
+│                        的占位模型（Khronos glTF-Sample-Models，CC-BY 4.0），
+│                        文件还在仓库里，但不随应用安装（要用它得让
+│                        MascotScene 的 modelSource 指向它）。
 ├── scripts/
 │   ├── launch-dev.sh            # 开发用：用包里的同一个启动脚本跑本地
 │   │                              构建，参数 wayland（默认）或 eglfs
@@ -345,5 +345,26 @@ sudo systemctl enable --now violoop-edge-kiosk-qt.service
 
 ## 许可说明
 
-角色动画依赖 `Qt Quick 3D` 模块，该模块开源版仅提供 GPL-3+ 授权（无 LGPL
-选项），因此本仓库及最终依赖该模块的产品线按 GPL-3 开源发布。
+本仓库自己的代码按 **GPL-3.0-or-later** 发布，全文见 [LICENSE](LICENSE)，
+吉祥物模型除外（见下）。
+
+原因：角色动画依赖 `Qt Quick 3D` 模块，该模块开源版只有 GPL-3.0-only
+授权（`LicenseRef-Qt-Commercial OR GPL-3.0-only`，无 LGPL 选项，以
+`qt/qtquick3d` 在 `v6.8.5-lts-lgpl` 的 `REUSE.toml` 和源文件头为准），
+因此本仓库及最终依赖该模块的产品线按 GPL-3 开源发布。
+
+- deb 包里的 `/usr/share/doc/violoop-edge-kiosk-qt/copyright`
+  （源文件 `packaging/debian/copyright`）写明了许可证和源码地址：包版本
+  `X.Y.Z` 对应本仓库的 git tag `vX.Y.Z`。
+- 运行时依赖的 `violoop-qt6`（Qt 6.8.5）是另一个包，构建脚本和各模块
+  的上游 ref 在 <https://github.com/BvioTech/violoop-qt-build>。
+- 打进二进制的三张 HDR（`assets/away/*.hdr`）和 `canopy.frag` 由 BvioTech
+  制作，和代码一样按 GPL-3.0-or-later 发布。
+- **吉祥物模型不在 GPL 之内**：`assets/away/VIO_DesktopPet.glb` 是 BvioTech
+  制作的专有素材，保留所有权利，仓库公开不等于授权他人使用；条款见
+  `copyright` 的 `LicenseRef-BvioTech-Proprietary`。它不打进二进制：
+  构建时拷到可执行文件旁的 `assets/away/`，deb 里装在
+  `/opt/violoop-edge-kiosk-qt/assets/away/`，程序运行时从那里读取
+  （`main.cpp` 的 `mascotModelUrl`）。
+- `assets/away/CesiumMan.glb` 是 CC-BY 4.0（Cesium 捐赠，另有 Cesium
+  商标条款），不打进发布包。
