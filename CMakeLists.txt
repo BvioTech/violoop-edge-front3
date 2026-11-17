@@ -88,6 +88,16 @@ qt_add_qml_module(violoop_edge_kiosk_qt
 # main.cpp looks for it at assets/away/ beside the executable; this puts a
 # copy there in the build directory, and scripts/build-deb.sh installs it
 # the same way. Tracked via git-lfs (see .gitattributes).
+# A git-lfs checkout without the LFS content leaves a small text pointer
+# in the model's place. Copied as it is, that builds and starts fine and
+# only shows as a mascot that fails to load, so stop here instead: a
+# binary glTF file starts with the four bytes "glTF".
+file(READ assets/away/VIO_DesktopPet.glb MASCOT_MODEL_MAGIC LIMIT 4 HEX)
+if(NOT MASCOT_MODEL_MAGIC STREQUAL "676c5446")
+    message(FATAL_ERROR
+        "assets/away/VIO_DesktopPet.glb is not a binary glTF file - "
+        "git-lfs content not fetched? (try `git lfs pull`)")
+endif()
 configure_file(assets/away/VIO_DesktopPet.glb assets/away/VIO_DesktopPet.glb COPYONLY)
 
 target_link_libraries(violoop_edge_kiosk_qt PRIVATE

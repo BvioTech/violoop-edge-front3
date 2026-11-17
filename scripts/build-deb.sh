@@ -97,18 +97,39 @@ install -m 0644 "$APP_DIR/packaging/usr/lib/systemd/system/violoop-edge-kiosk-qt
 # The license notice and where the source is (this is a GPL binary, so
 # both have to travel with it). The GPL's own text is not copied in: the
 # file points at /usr/share/common-licenses/GPL-3, which base-files
-# provides on every Debian system. The version placeholder becomes the
-# git tag this build's source is at.
-sed -e "s/VERSION_PLACEHOLDER/$VERSION/" \
+# provides on every Debian system.
+#
+# The file also names the revision this build's source is at. That is the
+# tag v$VERSION only when HEAD is that tag: version.txt keeps saying
+# $VERSION for every commit until the next bump, so a build of any other
+# commit names the commit instead of pointing at a tag it was not built
+# from.
+REPO_URL=$(awk '/^Source:/{print $2; exit}' "$APP_DIR/packaging/debian/copyright")
+if HEAD_SHA=$(git -C "$APP_DIR" rev-parse --verify -q HEAD 2>/dev/null); then
+  TAG_SHA=$(git -C "$APP_DIR" rev-parse --verify -q "refs/tags/v$VERSION^{commit}" 2>/dev/null || true)
+  if [ -n "$(git -C "$APP_DIR" status --porcelain --untracked-files=no 2>/dev/null)" ]; then
+    SOURCE_REVISION="This build was made from commit $HEAD_SHA with uncommitted changes."
+  elif [ "$HEAD_SHA" = "$TAG_SHA" ]; then
+    SOURCE_REVISION="This build was made from the tag v$VERSION: $REPO_URL/tree/v$VERSION"
+  else
+    SOURCE_REVISION="This build is not a release; it was made from commit $HEAD_SHA: $REPO_URL/tree/$HEAD_SHA"
+  fi
+else
+  SOURCE_REVISION="This build is not a release and was not made from a git checkout, so its source revision is not recorded."
+fi
+echo "Source revision: $SOURCE_REVISION"
+sed -e "s|SOURCE_REVISION_PLACEHOLDER|$SOURCE_REVISION|" \
     "$APP_DIR/packaging/debian/copyright" > "$STAGE/usr/share/doc/$PKG_NAME/copyright"
 chmod 0644 "$STAGE/usr/share/doc/$PKG_NAME/copyright"
-if grep -q 'VERSION_PLACEHOLDER' "$STAGE/usr/share/doc/$PKG_NAME/copyright"; then
+if grep -q '_PLACEHOLDER' "$STAGE/usr/share/doc/$PKG_NAME/copyright"; then
   echo "error: unfilled placeholder left in the staged copyright file" >&2
   exit 1
 fi
-if grep -q 'PROVENANCE_PENDING' "$STAGE/usr/share/doc/$PKG_NAME/copyright"; then
-  echo "warning: packaging/debian/copyright still has PROVENANCE_PENDING for the embedded assets (issue #17)" >&2
-fi
+
+# mkdir gave the staged directories whatever the builder's umask allows.
+# The service runs as its own user and has to reach the model under
+# /opt, so do not let a strict umask on the build machine decide that.
+find "$STAGE" -type d -exec chmod 0755 {} +
 
 OUT_DIR="$APP_DIR/output"
 OUT_DEB="$OUT_DIR/${PKG_NAME}_${VERSION}_${ARCH}.deb"

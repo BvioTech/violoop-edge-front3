@@ -3,11 +3,9 @@ Upstream-Name: violoop-edge-kiosk-qt
 Upstream-Contact: doctor <doctor@bvio.ai>
 Source: https://github.com/BvioTech/violoop-edge-front3
 Comment:
- The complete corresponding source of this package is the tree at the git
- tag named after the package version: version X.Y.Z is built from tag
- vX.Y.Z, i.e.
- https://github.com/BvioTech/violoop-edge-front3/tree/vVERSION_PLACEHOLDER
- for this build.
+ The complete corresponding source of this package is in that repository.
+ A release, version X.Y.Z, is built from the git tag vX.Y.Z.
+ SOURCE_REVISION_PLACEHOLDER
  .
  At run time the program links against the violoop-qt6 package (Qt 6.8.5,
  installed under /opt/violoop-qt6), which is not part of this package and
@@ -19,14 +17,14 @@ Comment:
 
 Files: *
 Copyright: 2026 BvioTech
-License: GPL-3.0-or-later
+License: GPL-3+
 
 Files: assets/away/visor-studio.hdr
  assets/away/display-studio.hdr
  assets/away/optical-studio.hdr
  assets/away/canopy.frag
 Copyright: 2026 BvioTech
-License: GPL-3.0-or-later
+License: GPL-3+
 Comment:
  Embedded in the binary via the Qt resource system. Three lighting images
  and the glass shader, made by BvioTech and released under the same
@@ -42,7 +40,7 @@ Comment:
  program reads at run time as data (a glTF file). It is not covered by
  the program's GPL license.
 
-License: GPL-3.0-or-later
+License: GPL-3+
  This program is free software: you can redistribute it and/or modify it
  under the terms of the GNU General Public License as published by the
  Free Software Foundation, either version 3 of the License, or (at your
@@ -59,7 +57,8 @@ License: GPL-3.0-or-later
 License: LicenseRef-BvioTech-Proprietary
  All rights reserved. This file is proprietary to BvioTech and is not
  licensed under the GNU General Public License or any other open-source
- license. It is distributed only as part of this package, for use by the
- program it contains; no permission is granted to copy, modify or
- redistribute it separately, or to use it in other works, without
- BvioTech's prior written permission.
+ license. BvioTech makes it available, in this package and in the
+ program's source repository, only for use with the program. No
+ permission is granted to copy, modify or redistribute it apart from the
+ program, or to use it in other works, without BvioTech's prior written
+ permission.

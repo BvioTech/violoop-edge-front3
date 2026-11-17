@@ -354,15 +354,17 @@ sudo systemctl enable --now violoop-edge-kiosk-qt.service
 因此本仓库及最终依赖该模块的产品线按 GPL-3 开源发布。
 
 - deb 包里的 `/usr/share/doc/violoop-edge-kiosk-qt/copyright`
-  （源文件 `packaging/debian/copyright`）写明了许可证和源码地址：包版本
-  `X.Y.Z` 对应本仓库的 git tag `vX.Y.Z`。
+  （源文件 `packaging/debian/copyright`）写明了许可证和源码地址：发布版 `X.Y.Z`
+  对应本仓库的 git tag `vX.Y.Z`；不是从该 tag 构建的包，
+  `build-deb.sh` 写入的是当时的提交哈希。
 - 运行时依赖的 `violoop-qt6`（Qt 6.8.5）是另一个包，构建脚本和各模块
   的上游 ref 在 <https://github.com/BvioTech/violoop-qt-build>。
 - 打进二进制的三张 HDR（`assets/away/*.hdr`）和 `canopy.frag` 由 BvioTech
   制作，和代码一样按 GPL-3.0-or-later 发布。
 - **吉祥物模型不在 GPL 之内**：`assets/away/VIO_DesktopPet.glb` 是 BvioTech
   制作的专有素材，保留所有权利，仓库公开不等于授权他人使用；条款见
-  `copyright` 的 `LicenseRef-BvioTech-Proprietary`。它不打进二进制：
+  `copyright` 的 `LicenseRef-BvioTech-Proprietary`，`assets/away/LICENSES.md`
+  逐个文件列了许可证。它不打进二进制：
   构建时拷到可执行文件旁的 `assets/away/`，deb 里装在
   `/opt/violoop-edge-kiosk-qt/assets/away/`，程序运行时从那里读取
   （`main.cpp` 的 `mascotModelUrl`）。
