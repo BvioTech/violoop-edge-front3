@@ -27,7 +27,7 @@ import EdgeFrontQt.Core
 // Asset: assets/away/VIO_DesktopPet.glb, the designer's mascot model
 // (tracked via git-lfs, see ../.gitattributes). It is a file beside the
 // executable, not a resource inside it - see CMakeLists.txt. Unlike the CesiumMan placeholder it
-// replaced (one walk cycle), it carries 20 clips named by event
+// replaced (one walk cycle), it carries 25 clips named by event
 // ("idle.default", "welcome", "touch.left", ...). RuntimeLoader only ever
 // shows the first one by itself; `clips` switches between them. Which
 // event plays which clip is not wired up - see
@@ -35,28 +35,18 @@ import EdgeFrontQt.Core
 View3D {
     id: scene
 
-    // The camera: yaw, pitch and distance say where it is on a sphere
-    // around `pivot`. Fixed.
+    // The camera: 35 degrees of vertical field of view, at
+    // (0, 1.10, 5.10), pitched -5.7 degrees, the model facing it
+    // squarely. Fixed. It is the camera the designer first set this model
+    // up for (qt/VioPreview.qml in their 2026-11-13 package).
     //
-    // They reproduce the camera the designer first set this
-    // model up for (qt/VioPreview.qml in their 2026-11-13 package): 35
-    // degrees of vertical field of view, at (0, 1.10, 5.10), pitched -5.7
-    // degrees. That line of sight crosses the character's axis
-    // (x = z = 0) at y = 1.10 - 5.10 * tan(5.7deg) ~= 0.59, which is the
-    // orbit pivot, 5.10 / cos(5.7deg) ~= 5.125 away. The model itself
-    // stands turned by modelYaw, as in their preview (the 2026-11-15
-    // one).
-    //
-    // That 2026-11-15 preview also moved the camera in to 3.85. Not
-    // followed: on this panel it puts the laptop and the mug of the
-    // "working" clip off the bottom and right edges, and the character
+    // Their later previews (2026-11-15, 2026-11-17) move it in to
+    // (0, 1.04, 3.85), backing off to 4.11 for the "working" clip, and
+    // shift the picture down a little. Not followed: the character
     // covering that much more of the screen costs a quarter of the frame
-    // rate (dev1: idle.default 42 fps against 56, working 41 against 56).
-    readonly property real yaw: 0
-    readonly property real pitch: -5.7
-    readonly property vector3d pivot: Qt.vector3d(0, 0.59, 0)
-    readonly property real distance: 5.125
-    readonly property real modelYaw: 14
+    // rate (dev1, 2026-11-17: idle.default 39 fps against 56).
+    readonly property vector3d cameraPosition: Qt.vector3d(0, 1.10, 5.10)
+    readonly property real cameraPitch: -5.7
 
     // The model to show. A property so that a different file can be put
     // in without editing the loader (the user-supplied-model feature in
@@ -222,22 +212,29 @@ View3D {
     // "working" clip's desk (the laptop "Notebook"; the two monitors and
     // the mug, one mesh), told apart from everything else by their silver
     // material (metalness 0.52, roughness 0.32),
-    // lightCue the empty node "VioLightCue", position (power, warmth, _).
+    // lightCue the empty node "VioLightCue", position (power, warmth, _),
+    // motionRoot the root bone ("base"), whose position is where the
+    // clips have moved the character to - what the floor's shadow
+    // follows.
     // A warmth of -1 is not a colour but the cue's way of saying
     // "offline" (the "offline" clip: grey lamp, grey eyes) - `offline`
     // below, with its own branch wherever the warmth is used.
     // Looked up by glTF node name, falling back on what the nodes look
     // like - which is what actually finds them: RuntimeLoader (Qt
     // 6.8.5-violoop3) does not carry node names over. For the cue that is
-    // its z, which the model keeps at 12.125 as a marker. Any of them can
-    // stay null: a light without a scope lights everything, and without
-    // the cue the lights sit at the model's normal state.
+    // its z, which the model keeps at 12.125 as a marker; the root bone
+    // is two levels above another such marker, an empty node at z 12.176
+    // under the helmet bone. Any of them can stay null: a light without a
+    // scope lights everything, without the cue the lights sit at the
+    // model's normal state, and without the root bone the shadow stays
+    // in the middle.
     property Model bodyModel: null
     property Model glassModel: null
     property Model displayModel: null
     property Model notebookModel: null
     property Model accessoryModel: null
     property Node lightCue: null
+    property Node motionRoot: null
     readonly property real lightPower: lightCue && !steadyLamp ? lightCue.x : 0.5
     readonly property real warmth: lightCue && !steadyLamp ? lightCue.y : 0
     readonly property bool offline: warmth < -0.5
@@ -247,7 +244,7 @@ View3D {
     function findRig() {
         let body = null, display = null, cue = null
         let bodyGuess = null, displayGuess = null, cueGuess = null, glass = null
-        let notebook = null, accessory = null
+        let notebook = null, accessory = null, root = null
         function visit(node) {
             if (node.objectName === "VioLightCue")
                 cue = node
@@ -284,6 +281,11 @@ View3D {
                 }
             } else if (!cueGuess && node.children.length === 0 && Math.abs(node.z - 12.125) < 0.001) {
                 cueGuess = node
+            } else if (!root && node.children.length === 0 && Math.abs(node.z - 12.176) < 0.0002
+                       && node.parent && node.parent.parent) {
+                // (The eyes carry markers of their own at 12.177 and
+                // 12.178.)
+                root = node.parent.parent
             }
             for (let i = 0; i < node.children.length; ++i)
                 visit(node.children[i])
@@ -295,6 +297,7 @@ View3D {
         glassModel = glass
         notebookModel = notebook
         accessoryModel = accessory
+        motionRoot = root
 
         // The designer's treatment of the face and the visor, as in their
         // qt/VioModel.qml. The face reflects its own small probe and its
@@ -315,7 +318,8 @@ View3D {
         console.log("MascotScene: light rig - body", bodyModel, body ? "(by name)" : "(guessed)",
                     "display", displayModel, display ? "(by name)" : "(guessed)",
                     "cue", lightCue, cue ? "(by name)" : "(guessed)", "power", lightPower, "warmth", warmth,
-                    "glass", glassModel, "notebook", notebookModel, "accessories", accessoryModel)
+                    "glass", glassModel, "notebook", notebookModel, "accessories", accessoryModel,
+                    "root bone", motionRoot)
     }
 
     // The loaded model's animation clips: clips.clipNames,
@@ -369,30 +373,47 @@ View3D {
         fragmentShader: Qt.resolvedUrl("../assets/away/canopy.frag")
     }
 
-    // Yaw and pitch on separate nested nodes so the orbit doesn't
-    // depend on Euler-angle composition order.
-    Node {
-        position: scene.pivot
-        eulerRotation.y: scene.yaw
+    PerspectiveCamera {
+        id: camera
+        position: scene.cameraPosition
+        eulerRotation.x: scene.cameraPitch
+        fieldOfView: 35
+        // Default clipNear (10) clips away meter-scale glTF content at
+        // this camera distance - same fix runtime_loader.qml needed, see
+        // that file's comment.
+        clipNear: 0.01
+        clipFar: 50
+    }
 
-        Node {
-            eulerRotation.x: scene.pitch
-
-            PerspectiveCamera {
-                id: camera
-                z: scene.distance
-                fieldOfView: 35
-                // Default clipNear (10) clips away meter-scale glTF
-                // content at this camera distance - same fix
-                // runtime_loader.qml needed, see that file's comment.
-                clipNear: 0.01
-                clipFar: 50
-            }
+    // The floor: a dark, finely grained ground that fades into the black
+    // around it, with the character's soft shadow and the light of its
+    // lamps on it (assets/away/ground.frag, the designer's shader,
+    // unchanged) - cyan normally, orange-red when the lamps are warm,
+    // none offline. It is all computed in the shader, one blended
+    // rectangle of 5.6 by 5.6 meters, with no shadow map behind it: the
+    // shadow is drawn where motionRoot says the character is, wider and
+    // fainter the higher it floats.
+    Model {
+        source: "#Rectangle"
+        y: -0.009
+        eulerRotation.x: -90
+        scale: Qt.vector3d(0.056, 0.056, 0.056)
+        materials: CustomMaterial {
+            property vector3d petOffset: scene.motionRoot ? scene.motionRoot.position : Qt.vector3d(0, 0, 0)
+            property real signalPower: scene.lightPower
+            property real signalWarmth: scene.warmth
+            shadingMode: CustomMaterial.Unshaded
+            sourceBlend: CustomMaterial.SrcAlpha
+            destinationBlend: CustomMaterial.OneMinusSrcAlpha
+            cullMode: Material.BackFaceCulling
+            depthDrawMode: Material.NeverDepthDraw
+            vertexShader: Qt.resolvedUrl("../assets/away/ground.vert")
+            fragmentShader: Qt.resolvedUrl("../assets/away/ground.frag")
         }
     }
 
     // The designer's light rig for this model, values as given in
-    // "VIO灯光参数与设备接入说明" (2026-11-15): three directional and
+    // "VIO灯光参数与设备接入说明" (2026-11-17): three directional and
     // three point lights, each scoped to either the shell or the face
     // (scene.bodyModel / scene.displayModel), positions in meters, plus
     // two directional lights for the desk of the "working" clip. Two of
@@ -405,10 +426,6 @@ View3D {
     // environment probe alone, and the dark metal shell and the hands
     // show little without it (on dev1: near black).
     //
-    // All of them stay fixed in the world (not parented to the camera
-    // rig) on purpose: the shading changing as the camera orbits is
-    // part of what shows this is a lit 3D scene.
-
     // The laptop of the "working" clip. Off unless the model has one: a
     // light without a scope would light everything.
     DirectionalLight {
@@ -487,7 +504,6 @@ View3D {
 
     RuntimeLoader {
         id: loader
-        eulerRotation.y: scene.modelYaw
         source: scene.loadStarted ? scene.modelSource : ""
         onStatusChanged: {
             scene.bodyModel = null
@@ -496,6 +512,7 @@ View3D {
             scene.notebookModel = null
             scene.accessoryModel = null
             scene.lightCue = null
+            scene.motionRoot = null
             scene.lampUpdates = []
             scene.steadyLampHolder = null
             scene.steadyLampMesh = null

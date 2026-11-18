@@ -1,5 +1,7 @@
 {
-  "once": ["welcome", "done", "touch.lick", "touch.what", "touch.left", "touch.right"],
+  "once": ["welcome", "done", "touch.lick", "touch.what", "touch.left", "touch.right",
+           "touch.upper_left", "touch.upper_right", "touch.center", "touch.upper_center",
+           "touch.lower_center"],
   "idle": {
     "base": "idle.default",
     "interludes": [
@@ -22,7 +24,11 @@
     "welcome": ["welcome"],
     "done": ["done"],
     "touch_left": ["touch.left"],
-    "touch_middle": ["touch.lick", "touch.what"],
-    "touch_right": ["touch.right"]
+    "touch_middle": ["touch.center"],
+    "touch_right": ["touch.right"],
+    "touch_upper_left": ["touch.upper_left"],
+    "touch_upper_middle": ["touch.upper_center"],
+    "touch_upper_right": ["touch.upper_right"],
+    "touch_lower_middle": ["touch.lower_center"]
   }
 }

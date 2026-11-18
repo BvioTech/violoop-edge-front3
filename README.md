@@ -10,8 +10,8 @@
   `RuntimeLoader` 运行时加载 glTF），对应 edge-front2 的待机页
   `lib/pages/away/away_page.dart`（那边播的是预渲染 MP4）。视角固定，
   唯一的手势是点击。播哪段动画由
-  `src/MascotDirector` 决定：没事时待机和随机小动作交替，点模型的左、中、
-  右会有反应。后端状态经
+  `src/MascotDirector` 决定：没事时待机和随机小动作交替，点画面的七个
+  区域（左、左上、右、右上、中、中上、中下）各有不同的反应。后端状态经
   `src/MascotInputs` 接进来，有离线、等待审批、工作、完成、异常和实时对话，见
   `docs/user-model-spec.md` 的"动画"一节。左上角是设备状态
   图标（WiFi/云端/HDMI/USB/配对口），右上角"开发"按钮进开发菜单。
@@ -45,7 +45,7 @@
 ├── assets/
 │   └── away/          # 主页用的 glTF 模型，git-lfs 追踪（见
 │                        .gitattributes）。VIO_DesktopPet.glb 是设计师
-│                        给的吉祥物模型（20 段动画），actions.json 说明
+│                        给的吉祥物模型（25 段动画），actions.json 说明
 │                        各段动画的用途；CesiumMan.glb 是之前
 │                        的占位模型（Khronos glTF-Sample-Models，CC-BY 4.0），
 │                        文件还在仓库里，但不随应用安装（要用它得让
@@ -359,7 +359,8 @@ sudo systemctl enable --now violoop-edge-kiosk-qt.service
   `build-deb.sh` 写入的是当时的提交哈希。
 - 运行时依赖的 `violoop-qt6`（Qt 6.8.5）是另一个包，构建脚本和各模块
   的上游 ref 在 <https://github.com/BvioTech/violoop-qt-build>。
-- 打进二进制的三张 HDR（`assets/away/*.hdr`）和 `canopy.frag` 由 BvioTech
+- 打进二进制的三张 HDR（`assets/away/*.hdr`）、`canopy.frag` 和地面着色器
+  `ground.vert`/`ground.frag` 由 BvioTech
   制作，和代码一样按 GPL-3.0-or-later 发布。
 - **吉祥物模型不在 GPL 之内**：`assets/away/VIO_DesktopPet.glb` 是 BvioTech
   制作的专有素材，保留所有权利，仓库公开不等于授权他人使用；条款见
