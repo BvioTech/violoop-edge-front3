@@ -24,7 +24,9 @@
 //                     "waiting_user": "waiting_user" },
 //     "cues": { "welcome": ["welcome"], "done": ["done"],
 //               "touch_left": [...], "touch_middle": [...],   alternatives,
-//               "touch_right": [...] }                         used in turn
+//               "touch_right": [...],                          used in turn
+//               "touch_upper_left": [...], "touch_upper_middle": [...],
+//               "touch_upper_right": [...], "touch_lower_middle": [...] }
 //   }
 //
 // It carries no clip lengths on purpose: those come from the loaded model

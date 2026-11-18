@@ -74,11 +74,13 @@ qt_add_qml_module(violoop_edge_kiosk_qt
         # The designer's scene resources for qml/HomePage.qml, as shipped
         # in their package's qt/ folder: the environment light probe, the
         # face's own probe, the panorama the visor glass reflects, and the
-        # glass shader.
+        # glass shader, and the shader pair that draws the floor.
         assets/away/visor-studio.hdr
         assets/away/display-studio.hdr
         assets/away/optical-studio.hdr
         assets/away/canopy.frag
+        assets/away/ground.vert
+        assets/away/ground.frag
 )
 
 # The mascot model is deliberately NOT in RESOURCES above: it is BvioTech's

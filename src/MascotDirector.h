@@ -84,10 +84,15 @@ public:
         // goal that was being worked on, unless Working is set (again):
         // then it is another goal that is done.
         Done,
-        // Only while idle; play in full.
+        // Only while idle; play in full. One per zone of the picture the
+        // mascot is in (qml/HomePage.qml says where they are).
         TouchLeft,
         TouchMiddle,
         TouchRight,
+        TouchUpperLeft,
+        TouchUpperMiddle,
+        TouchUpperRight,
+        TouchLowerMiddle,
     };
     Q_ENUM(Cue)
 

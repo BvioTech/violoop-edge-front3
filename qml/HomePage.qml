@@ -69,8 +69,11 @@ Item {
         anchors.fill: parent
         steadyLamp: mascot.steadyLamp
 
-        // A tap pokes the mascot: on its left, its right, or in the
-        // middle. The position is in the View3D's own coordinates, not in
+        // A tap pokes the mascot, in one of seven zones that between them
+        // cover the whole view (the designer's touch-zones.json): three
+        // columns split at 0.34 and 0.66 of the width, the outer two cut
+        // in two at 0.38 of the height, the middle one in three at 0.34
+        // and 0.68. The position is in the View3D's own coordinates, not in
         // scene (window) coordinates: AppShell.qml rotates the whole UI
         // -90 degrees for the physical panel, so on the device the two
         // are a quarter turn apart.
@@ -83,9 +86,15 @@ Item {
                 const over = root.childAt(point.position.x, point.position.y)
                 if (over !== scene && !(over instanceof Text))
                     return
-                const x = point.position.x
-                mascot.cue(x < scene.width / 3 ? Mascot.TouchLeft
-                           : x > scene.width * 2 / 3 ? Mascot.TouchRight : Mascot.TouchMiddle)
+                const x = point.position.x / scene.width
+                const y = point.position.y / scene.height
+                if (x < 0.34)
+                    mascot.cue(y < 0.38 ? Mascot.TouchUpperLeft : Mascot.TouchLeft)
+                else if (x >= 0.66)
+                    mascot.cue(y < 0.38 ? Mascot.TouchUpperRight : Mascot.TouchRight)
+                else
+                    mascot.cue(y < 0.34 ? Mascot.TouchUpperMiddle
+                               : y >= 0.68 ? Mascot.TouchLowerMiddle : Mascot.TouchMiddle)
             }
         }
     }

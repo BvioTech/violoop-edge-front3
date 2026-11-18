@@ -27,6 +27,10 @@ QString cueKey(MascotDirector::Cue cue)
     case MascotDirector::TouchLeft: return QStringLiteral("touch_left");
     case MascotDirector::TouchMiddle: return QStringLiteral("touch_middle");
     case MascotDirector::TouchRight: return QStringLiteral("touch_right");
+    case MascotDirector::TouchUpperLeft: return QStringLiteral("touch_upper_left");
+    case MascotDirector::TouchUpperMiddle: return QStringLiteral("touch_upper_middle");
+    case MascotDirector::TouchUpperRight: return QStringLiteral("touch_upper_right");
+    case MascotDirector::TouchLowerMiddle: return QStringLiteral("touch_lower_middle");
     }
     return QString();
 }

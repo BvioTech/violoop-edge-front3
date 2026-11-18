@@ -19,19 +19,20 @@ private:
     static QJsonObject manifest()
     {
         return QJsonDocument::fromJson(R"({
-            "once": ["welcome", "done", "touch.l", "touch.m1", "touch.m2", "touch.r"],
+            "once": ["welcome", "done", "touch.l", "touch.m1", "touch.m2", "touch.r", "touch.ul"],
             "idle": { "base": "rest", "interludes": ["play", "nap"] },
             "work": ["type", "read", "code"],
             "conditions": { "offline": "offline", "error": "error", "waiting_user": "wait" },
             "cues": { "welcome": ["welcome"], "done": ["done"], "touch_left": ["touch.l"],
-                      "touch_middle": ["touch.m1", "touch.m2"], "touch_right": ["touch.r"] }
+                      "touch_middle": ["touch.m1", "touch.m2"], "touch_right": ["touch.r"],
+                      "touch_upper_left": ["touch.ul"] }
         })").object();
     }
 
     static QStringList allClips()
     {
         return { "rest", "play", "nap", "type", "read", "code", "offline", "error", "wait",
-                 "welcome", "done", "touch.l", "touch.m1", "touch.m2", "touch.r" };
+                 "welcome", "done", "touch.l", "touch.m1", "touch.m2", "touch.r", "touch.ul" };
     }
 
     // A director with a spy on its directives.
@@ -156,6 +157,17 @@ private slots:
         f.director.cue(MascotDirector::TouchRight);   // ignored: one is playing
         QCOMPARE(f.played(), QStringList({ "rest", "touch.l!" }));
         QTRY_COMPARE(f.played().mid(0, 3), QStringList({ "rest", "touch.l!", "rest" }));
+    }
+
+    void eachZoneHasItsOwnClip()
+    {
+        Fixture f;
+        f.attach();
+        f.director.cue(MascotDirector::TouchUpperLeft);
+        QCOMPARE(f.played(), QStringList({ "rest", "touch.ul!" }));
+        QTRY_COMPARE(f.played().mid(0, 3), QStringList({ "rest", "touch.ul!", "rest" }));
+        // No clip for this zone in the manifest: nothing happens.
+        QVERIFY(!f.director.cue(MascotDirector::TouchLowerMiddle));
     }
 
     void middleTouchesTakeTurns()

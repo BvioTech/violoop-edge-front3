@@ -23,11 +23,13 @@ Files: assets/away/visor-studio.hdr
  assets/away/display-studio.hdr
  assets/away/optical-studio.hdr
  assets/away/canopy.frag
+ assets/away/ground.vert
+ assets/away/ground.frag
 Copyright: 2026 BvioTech
 License: GPL-3+
 Comment:
- Embedded in the binary via the Qt resource system. Three lighting images
- and the glass shader, made by BvioTech and released under the same
+ Embedded in the binary via the Qt resource system. Three lighting images,
+ the glass shader and the floor shader, made by BvioTech and released under the same
  license as the program.
 
 Files: assets/away/VIO_DesktopPet.glb
